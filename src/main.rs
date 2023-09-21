@@ -1,52 +1,53 @@
 mod color;
 mod ray;
 
-use color::{write_color, Color};
-use glam::{vec3, Vec3};
+use glam::{dvec3, DVec3};
+use indicatif::ProgressIterator;
+use itertools::Itertools;
 use ray::Ray;
+use std::fs;
 
-fn main() {
-    let aspect_ratio = 16f32 / 9f32;
-    let image_width = 400;
+const ASPECT_RATIO: f64 = 16. / 9.;
+const IMAGE_WIDTH: u32 = 400;
+const IMAGE_HEIGHT: u32 = if ((IMAGE_WIDTH as f64 / ASPECT_RATIO) as u32) < 1 {
+    1
+} else {
+    (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u32
+};
 
-    let image_height = (image_width as f32 / aspect_ratio) as i32;
-    let image_height = if image_height < 1 { 1 } else { image_height };
+const FOCAL_LENGHT: f64 = 1.;
+const VIEWPORT_HEIGHT: f64 = 2.;
+const VIEWPORT_WIDTH: f64 = VIEWPORT_HEIGHT * (IMAGE_WIDTH as f64 / IMAGE_HEIGHT as f64);
+const CAMERA_CENTER: DVec3 = DVec3::ZERO;
 
-    let focal_lenght = 1f32;
-    let viewport_height = 2f32;
-    let viewport_width = viewport_height * (image_width as f32 / image_height as f32);
-    let camera_center = Vec3::ZERO;
+const VIEWPORT_U: DVec3 = dvec3(VIEWPORT_WIDTH, 0., 0.);
+const VIEWPORT_V: DVec3 = dvec3(0., -VIEWPORT_HEIGHT, 0.);
 
-    let viewport_u = vec3(viewport_width, 0., 0.);
-    let viewport_v = vec3(0., -viewport_height, 0.);
-
-    let pixel_delta_u = viewport_u / image_width as f32;
-    let pixel_delta_v = viewport_v / image_height as f32;
+fn main() -> Result<(), std::io::Error> {
+    let pixel_delta_u = VIEWPORT_U / IMAGE_WIDTH as f64;
+    let pixel_delta_v = VIEWPORT_V / IMAGE_HEIGHT as f64;
 
     let viewport_upper_left =
-        camera_center - vec3(0., 0., focal_lenght) - viewport_u / 2. - viewport_v / 2.;
+        CAMERA_CENTER - dvec3(0., 0., FOCAL_LENGHT) - VIEWPORT_U / 2. - VIEWPORT_V / 2.;
 
     let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
-    println!("P3 {} {} 255", image_width, image_height);
-
-    for j in 0..image_height {
-        eprintln!("\rScanlines remaining: {} ", image_height - j);
-        for i in 0..image_width {
+    let pixels = (0..IMAGE_HEIGHT)
+        .cartesian_product(0..IMAGE_WIDTH)
+        .progress_count(IMAGE_WIDTH as u64 * IMAGE_HEIGHT as u64)
+        .map(|(y, x)| {
             let pixel_center =
-                pixel00_loc + (i as f32 * pixel_delta_u) + (j as f32 * pixel_delta_v);
-            let ray_dir = pixel_center - camera_center;
+                pixel00_loc + (x as f64 * pixel_delta_u) + (y as f64 * pixel_delta_v);
+            let ray_dir = pixel_center - CAMERA_CENTER;
 
-            let pixel_color = ray_color(&Ray::new(camera_center, ray_dir));
-            write_color(&mut std::io::stdout(), &pixel_color);
-        }
-    }
-
-    eprintln!("\rDone.");
-}
-
-fn ray_color(r: &Ray) -> Color {
-    let unit_dir = r.dir.normalize();
-    let a = 0.5 * (unit_dir.y + 1.);
-    Color::lerp(Color::ONE, Color::new(0.5, 0.7, 1.), a)
+            let ray = Ray::new(CAMERA_CENTER, ray_dir);
+            let pixel_color = ray.color() * 255.;
+            format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
+        })
+        .join(" ");
+    fs::write(
+        "image.ppm",
+        format!("P3 {IMAGE_WIDTH} {IMAGE_HEIGHT} 255 {pixels}"),
+    )?;
+    Ok(())
 }
