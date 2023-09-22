@@ -16,8 +16,11 @@ impl Ray {
     }
 
     pub fn color(&self) -> Color {
-        if self.hit_sphere(dvec3(0., 0., -1.), 0.5) {
-            return Color::new(1., 0., 0.);
+        let sphere_center = dvec3(0., 0., -1.);
+        let t = self.hit_sphere(sphere_center, 0.5);
+        if t > 0. {
+            let normal = self.at(t) - sphere_center;
+            return 0.5 * Color::new(normal.x + 1., normal.y + 1., normal.z + 1.);
         }
 
         let unit_dir = self.dir.normalize();
@@ -25,12 +28,16 @@ impl Ray {
         Color::lerp(Color::ONE, Color::new(0.5, 0.7, 1.), a)
     }
 
-    pub fn hit_sphere(&self, center: DVec3, radius: f64) -> bool {
+    pub fn hit_sphere(&self, center: DVec3, radius: f64) -> f64 {
         let ac = self.orig - center;
         let a = self.dir.dot(self.dir);
         let b = 2. * self.dir.dot(ac);
         let c = ac.dot(ac) - radius * radius;
         let discriminant = b * b - 4. * a * c;
-        discriminant >= 0.
+        if discriminant < 0. {
+            -1.
+        } else {
+            (-b - discriminant.sqrt()) / (2. * a)
+        }
     }
 }
