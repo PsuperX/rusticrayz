@@ -22,7 +22,7 @@ impl Ray {
         }
 
         if let Some(hit) = world.hit(self, f64::EPSILON..f64::INFINITY) {
-            let dir = random_on_hemisphere(hit.normal);
+            let dir = hit.normal + random_in_unit_sphere();
             let ray = Ray::new(hit.point, dir);
             return 0.5 * ray.color(depth - 1, world);
         }
