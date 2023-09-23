@@ -14,6 +14,7 @@ pub struct Camera {
     pixel_delta_v: DVec3,
     pixel_delta_u: DVec3,
     samples_per_pixel: u32,
+    max_depth: u32,
 }
 
 impl Camera {
@@ -48,6 +49,7 @@ impl Camera {
             pixel_delta_v,
             pixel_delta_u,
             samples_per_pixel: 100,
+            max_depth: 50,
         }
     }
 
@@ -57,7 +59,7 @@ impl Camera {
             .progress_count(self.image_width as u64 * self.image_height as u64)
             .map(|(y, x)| {
                 let multisampled_pixel_color = (0..self.samples_per_pixel)
-                    .map(|_| self.get_ray(x, y).color(world))
+                    .map(|_| self.get_ray(x, y).color(self.max_depth, world))
                     .sum::<DVec3>();
 
                 let scale = 1. / self.samples_per_pixel as f64;
