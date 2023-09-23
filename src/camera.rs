@@ -2,6 +2,7 @@ use crate::{hittable::Hittable, ray::Ray};
 use glam::{dvec3, DVec3};
 use indicatif::ProgressIterator;
 use itertools::Itertools;
+use rand::{thread_rng, Rng};
 use std::{fs, io};
 
 pub struct Camera {
@@ -12,6 +13,7 @@ pub struct Camera {
     pixel00_loc: DVec3,
     pixel_delta_v: DVec3,
     pixel_delta_u: DVec3,
+    samples_per_pixel: u32,
 }
 
 impl Camera {
@@ -45,6 +47,7 @@ impl Camera {
             pixel00_loc,
             pixel_delta_v,
             pixel_delta_u,
+            samples_per_pixel: 100,
         }
     }
 
@@ -53,13 +56,12 @@ impl Camera {
             .cartesian_product(0..self.image_width)
             .progress_count(self.image_width as u64 * self.image_height as u64)
             .map(|(y, x)| {
-                let pixel_center = self.pixel00_loc
-                    + (x as f64 * self.pixel_delta_u)
-                    + (y as f64 * self.pixel_delta_v);
-                let ray_dir = pixel_center - self.center;
+                let multisampled_pixel_color = (0..self.samples_per_pixel)
+                    .map(|_| self.get_ray(x, y).color(world))
+                    .sum::<DVec3>();
 
-                let ray = Ray::new(self.center, ray_dir);
-                let pixel_color = ray.color(world) * 255.;
+                let scale = 1. / self.samples_per_pixel as f64;
+                let pixel_color = 255. * scale * multisampled_pixel_color;
                 format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
             })
             .join(" ");
@@ -69,5 +71,21 @@ impl Camera {
         )?;
 
         Ok(())
+    }
+
+    fn get_ray(&self, x: u32, y: u32) -> Ray {
+        let pixel_center =
+            self.pixel00_loc + (x as f64 * self.pixel_delta_u) + (y as f64 * self.pixel_delta_v);
+        let pixel_sample = pixel_center + self.pixel_sample_square();
+        let ray_dir = pixel_sample - self.center;
+
+        Ray::new(self.center, ray_dir)
+    }
+
+    fn pixel_sample_square(&self) -> DVec3 {
+        let mut rng = thread_rng();
+        let px = -0.5 + rng.gen::<f64>();
+        let py = -0.5 + rng.gen::<f64>();
+        (px * self.pixel_delta_u) + (py * self.pixel_delta_v)
     }
 }
