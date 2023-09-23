@@ -1,10 +1,14 @@
 mod color;
+mod hittable;
 mod ray;
+mod sphere;
 
 use glam::{dvec3, DVec3};
+use hittable::HittableList;
 use indicatif::ProgressIterator;
 use itertools::Itertools;
 use ray::Ray;
+use sphere::Sphere;
 use std::fs;
 
 const ASPECT_RATIO: f64 = 16. / 9.;
@@ -32,6 +36,13 @@ fn main() -> Result<(), std::io::Error> {
 
     let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
+    let world = HittableList {
+        objects: vec![
+            Box::new(Sphere::new(dvec3(0., 0., -1.), 0.5)),
+            Box::new(Sphere::new(dvec3(0., -100.5, -1.), 100.)),
+        ],
+    };
+
     let pixels = (0..IMAGE_HEIGHT)
         .cartesian_product(0..IMAGE_WIDTH)
         .progress_count(IMAGE_WIDTH as u64 * IMAGE_HEIGHT as u64)
@@ -41,7 +52,7 @@ fn main() -> Result<(), std::io::Error> {
             let ray_dir = pixel_center - CAMERA_CENTER;
 
             let ray = Ray::new(CAMERA_CENTER, ray_dir);
-            let pixel_color = ray.color() * 255.;
+            let pixel_color = ray.color(&world) * 255.;
             format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
         })
         .join(" ");
