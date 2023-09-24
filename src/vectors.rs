@@ -45,6 +45,12 @@ impl Dvec3Extensions for DVec3 {
     }
 }
 
+pub fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
+    let mut r0 = (1. - ref_idx) / (1. + ref_idx);
+    r0 = r0 * r0;
+    r0 + (1. - r0) * (1. - cosine).powi(5)
+}
+
 pub fn random_on_hemisphere(normal: DVec3) -> DVec3 {
     let on_unit_sphere = DVec3::random_unit_vector();
     if on_unit_sphere.dot(normal) > 0. {

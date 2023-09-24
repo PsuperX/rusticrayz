@@ -1,5 +1,11 @@
-use crate::{color::Color, hittable::HitRecord, ray::Ray, vectors::Dvec3Extensions};
+use crate::{
+    color::Color,
+    hittable::HitRecord,
+    ray::Ray,
+    vectors::{reflectance, Dvec3Extensions},
+};
 use glam::DVec3;
+use rand::{thread_rng, Rng};
 
 pub trait Material {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered>;
@@ -54,6 +60,7 @@ pub struct Dielectric {
 
 impl Material for Dielectric {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered> {
+        let mut rng = thread_rng();
         let refraction_ratio = if hit.front_face {
             1. / self.refraction_idx
         } else {
@@ -65,7 +72,7 @@ impl Material for Dielectric {
         let sin_theta = (1. - cos_theta * cos_theta).sqrt();
 
         let cannot_refract = refraction_ratio * sin_theta > 1.;
-        let direction = if cannot_refract {
+        let direction = if cannot_refract || reflectance(cos_theta, refraction_ratio) > rng.gen() {
             unit_dir.reflect(hit.normal)
         } else {
             unit_dir.refract(hit.normal, refraction_ratio)
