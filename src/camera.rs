@@ -63,7 +63,8 @@ impl Camera {
                     .sum::<DVec3>();
 
                 let scale = 1. / self.samples_per_pixel as f64;
-                let pixel_color = 255. * scale * multisampled_pixel_color;
+                let mut pixel_color = scale * multisampled_pixel_color;
+                pixel_color = 255. * linear_to_gamma(pixel_color);
                 format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
             })
             .join(" ");
@@ -90,4 +91,8 @@ impl Camera {
         let py = -0.5 + rng.gen::<f64>();
         (px * self.pixel_delta_u) + (py * self.pixel_delta_v)
     }
+}
+
+fn linear_to_gamma(linear: DVec3) -> DVec3 {
+    dvec3(linear.x.sqrt(), linear.y.sqrt(), linear.z.sqrt())
 }
