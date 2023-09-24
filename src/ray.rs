@@ -20,7 +20,7 @@ impl Ray {
             return Color::ZERO;
         }
 
-        if let Some(hit) = world.hit(self, f64::EPSILON..f64::INFINITY) {
+        if let Some(hit) = world.hit(self, 0.001..f64::INFINITY) {
             if let Some(scatter) = hit.material.scatter(self, &hit) {
                 return scatter.attenuation * scatter.ray.color(depth - 1, world);
             }

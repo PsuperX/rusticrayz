@@ -32,14 +32,48 @@ impl Material for Lambertian {
 
 pub struct Metallic {
     pub albedo: Color,
+    pub fuzz: f64,
 }
 
 impl Material for Metallic {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered> {
         let reflected = ray.dir.normalize().reflect(hit.normal);
         Some(Scattered {
-            ray: Ray::new(hit.point, reflected),
+            ray: Ray::new(
+                hit.point,
+                reflected + self.fuzz * DVec3::random_unit_vector(),
+            ),
             attenuation: self.albedo,
+        })
+    }
+}
+
+pub struct Dielectric {
+    pub refraction_idx: f64,
+}
+
+impl Material for Dielectric {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered> {
+        let refraction_ratio = if hit.front_face {
+            1. / self.refraction_idx
+        } else {
+            self.refraction_idx
+        };
+
+        let unit_dir = ray.dir.normalize();
+        let cos_theta = (-unit_dir).dot(hit.normal).min(1.);
+        let sin_theta = (1. - cos_theta * cos_theta).sqrt();
+
+        let cannot_refract = refraction_ratio * sin_theta > 1.;
+        let direction = if cannot_refract {
+            unit_dir.reflect(hit.normal)
+        } else {
+            unit_dir.refract(hit.normal, refraction_ratio)
+        };
+
+        Some(Scattered {
+            ray: Ray::new(hit.point, direction),
+            attenuation: Color::ONE,
         })
     }
 }
