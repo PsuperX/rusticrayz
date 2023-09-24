@@ -1,7 +1,8 @@
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use crate::{
     hittable::{HitRecord, Hittable},
+    material::Material,
     ray::Ray,
 };
 use glam::DVec3;
@@ -9,11 +10,16 @@ use glam::DVec3;
 pub struct Sphere {
     pub center: DVec3,
     pub radius: f64,
+    pub material: Rc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(center: DVec3, radius: f64) -> Self {
-        Self { center, radius }
+    pub fn new(center: DVec3, radius: f64, material: Rc<dyn Material>) -> Self {
+        Self {
+            center,
+            radius,
+            material,
+        }
     }
 }
 
@@ -42,6 +48,12 @@ impl Hittable for Sphere {
         let t = root;
         let point = ray.at(t);
         let outward_normal = (point - self.center) / self.radius;
-        Some(HitRecord::with_face_normal(point, outward_normal, t, ray))
+        Some(HitRecord::with_face_normal(
+            point,
+            outward_normal,
+            t,
+            ray,
+            self.material.as_ref(),
+        ))
     }
 }

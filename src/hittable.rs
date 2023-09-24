@@ -1,4 +1,4 @@
-use crate::ray::Ray;
+use crate::{material::Material, ray::Ray};
 use glam::DVec3;
 use std::ops::Range;
 
@@ -6,16 +6,23 @@ pub trait Hittable {
     fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord>;
 }
 
-pub struct HitRecord {
+pub struct HitRecord<'a> {
     pub point: DVec3,
     pub normal: DVec3,
     pub t: f64,
     pub front_face: bool,
+    pub material: &'a dyn Material,
 }
 
-impl HitRecord {
+impl<'a> HitRecord<'a> {
     /// NOTE: the parameter `outward_normal` is assumed to have unit length.
-    pub fn with_face_normal(point: DVec3, outward_normal: DVec3, t: f64, ray: &Ray) -> Self {
+    pub fn with_face_normal(
+        point: DVec3,
+        outward_normal: DVec3,
+        t: f64,
+        ray: &Ray,
+        material: &'a dyn Material,
+    ) -> Self {
         let (front_face, normal) = Self::calc_face_normal(ray, outward_normal);
 
         Self {
@@ -23,6 +30,7 @@ impl HitRecord {
             normal,
             t,
             front_face,
+            material,
         }
     }
 
