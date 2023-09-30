@@ -40,7 +40,12 @@ fn main() -> io::Result<()> {
                 material_ground,
             )),
             Box::new(Sphere::new(dvec3(0.0, 0.0, -1.0), 0.5, material_center)),
-            Box::new(Sphere::new(dvec3(-1.0, 0.0, -1.0), 0.5, material_left)),
+            Box::new(Sphere::new(
+                dvec3(-1.0, 0.0, -1.0),
+                0.5,
+                material_left.clone(),
+            )),
+            Box::new(Sphere::new(dvec3(-1.0, 0.0, -1.0), -0.4, material_left)),
             Box::new(Sphere::new(dvec3(1.0, 0.0, -1.0), 0.5, material_right)),
         ],
     };
