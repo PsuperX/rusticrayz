@@ -15,6 +15,7 @@ pub struct Camera {
     pixel_delta_u: DVec3,
     samples_per_pixel: u32,
     max_depth: u32,
+    vfov: f64,
 }
 
 impl Camera {
@@ -26,7 +27,10 @@ impl Camera {
         };
 
         let focal_lenght = 1.;
-        let viewport_height = 2.;
+        let vfov = 90f64;
+        let theta = vfov.to_radians();
+        let h = (theta / 2.).tan();
+        let viewport_height = 2. * h * focal_lenght;
         let viewport_width = viewport_height * (image_width as f64 / image_height as f64);
         let center = DVec3::ZERO;
 
@@ -50,6 +54,7 @@ impl Camera {
             pixel_delta_u,
             samples_per_pixel: 100,
             max_depth: 50,
+            vfov,
         }
     }
 
