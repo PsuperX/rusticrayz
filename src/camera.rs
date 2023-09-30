@@ -64,7 +64,8 @@ impl Camera {
 
                 let scale = 1. / self.samples_per_pixel as f64;
                 let mut pixel_color = scale * multisampled_pixel_color;
-                pixel_color = 255. * linear_to_gamma(pixel_color);
+                pixel_color = 255.
+                    * linear_to_gamma(pixel_color).clamp(DVec3::splat(0.), DVec3::splat(0.999));
                 format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
             })
             .join(" ");
