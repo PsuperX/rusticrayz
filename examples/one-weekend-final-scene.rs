@@ -1,18 +1,10 @@
-mod camera;
-mod color;
-mod hittable;
-mod material;
-mod ray;
-mod sphere;
-mod vectors;
-
-use camera::{Camera, CameraSettings};
-use color::Color;
 use glam::{dvec3, DVec3};
 use itertools::Itertools;
-use material::*;
 use rand::{thread_rng, Rng};
-use sphere::Sphere;
+use rusticrayz::camera::{Camera, CameraSettings};
+use rusticrayz::color::Color;
+use rusticrayz::material::*;
+use rusticrayz::sphere::Sphere;
 use std::{io, sync::Arc};
 
 fn main() -> io::Result<()> {
