@@ -5,6 +5,19 @@ use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use std::{fs, io};
 
+pub struct CameraSettings {
+    pub image_width: u32,
+    pub aspect_ratio: f64,
+    pub samples_per_pixel: u32,
+    pub max_depth: u32,
+    pub look_from: Option<DVec3>,
+    pub look_at: Option<DVec3>,
+    pub view_up: Option<DVec3>,
+    pub vfov: Option<f64>,
+    pub defocus_angle: Option<f64>,
+    pub focus_dist: Option<f64>,
+}
+
 pub struct Camera {
     aspect_ratio: f64,
     image_width: u32,
@@ -15,33 +28,21 @@ pub struct Camera {
     pixel_delta_u: DVec3,
     samples_per_pixel: u32,
     max_depth: u32,
-    vfov: f64,
-    look_from: DVec3,
-    look_at: DVec3,
-    view_up: DVec3,
     defocus_angle: f64,
-    focus_dist: f64,
     defocus_disk_u: DVec3,
     defocus_disk_v: DVec3,
 }
 
 impl Camera {
-    pub fn new(
-        image_width: u32,
-        aspect_ratio: f64,
-        look_from: Option<DVec3>,
-        look_at: Option<DVec3>,
-        view_up: Option<DVec3>,
-        vfov: Option<f64>,
-        defocus_angle: Option<f64>,
-        focus_dist: Option<f64>,
-    ) -> Self {
-        let look_from = look_from.unwrap_or(DVec3::NEG_Z);
-        let look_at = look_at.unwrap_or(DVec3::ZERO);
-        let view_up = view_up.unwrap_or(DVec3::Y);
-        let vfov = vfov.unwrap_or(20.);
-        let defocus_angle = defocus_angle.unwrap_or(0.);
-        let focus_dist = focus_dist.unwrap_or(10.);
+    pub fn new(settings: CameraSettings) -> Self {
+        let image_width = settings.image_width;
+        let aspect_ratio = settings.aspect_ratio;
+        let look_from = settings.look_from.unwrap_or(DVec3::NEG_Z);
+        let look_at = settings.look_at.unwrap_or(DVec3::ZERO);
+        let view_up = settings.view_up.unwrap_or(DVec3::Y);
+        let vfov = settings.vfov.unwrap_or(20.);
+        let defocus_angle = settings.defocus_angle.unwrap_or(0.);
+        let focus_dist = settings.focus_dist.unwrap_or(10.);
 
         let image_height = if ((image_width as f64 / aspect_ratio) as u32) < 1 {
             1
@@ -82,14 +83,9 @@ impl Camera {
             pixel00_loc,
             pixel_delta_v,
             pixel_delta_u,
-            samples_per_pixel: 100,
-            max_depth: 50,
-            vfov,
-            look_from,
-            look_at,
-            view_up,
+            samples_per_pixel: settings.samples_per_pixel,
+            max_depth: settings.max_depth,
             defocus_angle,
-            focus_dist,
             defocus_disk_u,
             defocus_disk_v,
         }

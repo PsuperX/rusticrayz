@@ -6,63 +6,82 @@ mod ray;
 mod sphere;
 mod vectors;
 
-use camera::Camera;
+use camera::{Camera, CameraSettings};
 use color::Color;
 use glam::{dvec3, DVec3};
 use hittable::HittableList;
+use itertools::Itertools;
 use material::*;
+use rand::{thread_rng, Rng};
 use sphere::Sphere;
 use std::{io, rc::Rc};
 
-const ASPECT_RATIO: f64 = 16. / 9.;
-const IMAGE_WIDTH: u32 = 400;
-
 fn main() -> io::Result<()> {
-    let material_ground = Rc::new(Lambertian {
-        albedo: Color::new(0.8, 0.8, 0.0),
-    });
-    let material_center = Rc::new(Lambertian {
-        albedo: Color::new(0.1, 0.2, 0.5),
-    });
-    let material_left = Rc::new(Dielectric {
-        refraction_idx: 1.5,
-    });
-    let material_right = Rc::new(Metallic {
-        albedo: Color::new(0.8, 0.6, 0.2),
-        fuzz: 0.0,
-    });
-
-    let world = HittableList {
-        objects: vec![
-            Box::new(Sphere::new(
-                dvec3(0.0, -100.5, -1.0),
-                100.0,
-                material_ground,
-            )),
-            Box::new(Sphere::new(dvec3(0.0, 0.0, -1.0), 0.5, material_center)),
-            Box::new(Sphere::new(
-                dvec3(-1.0, 0.0, -1.0),
-                0.5,
-                material_left.clone(),
-            )),
-            Box::new(Sphere::new(dvec3(-1.0, 0.0, -1.0), -0.4, material_left)),
-            Box::new(Sphere::new(dvec3(1.0, 0.0, -1.0), 0.5, material_right)),
-        ],
+    let mut world = HittableList {
+        objects: Vec::new(),
     };
 
-    let look_from = Some(dvec3(-2.0, 2.0, 1.0));
-    let look_at = Some(dvec3(0.0, 0.0, -1.0));
-    let view_up = Some(DVec3::Y);
-    let camera = Camera::new(
-        IMAGE_WIDTH,
-        ASPECT_RATIO,
-        look_from,
-        look_at,
-        view_up,
-        Some(20.),
-        Some(10.),
-        Some(3.4),
-    );
+    let material_ground = Rc::new(Lambertian {
+        albedo: Color::new(0.5, 0.5, 0.5),
+    });
+    world.add(Sphere::new(dvec3(0., -1000., 0.), 1000., material_ground));
+
+    let mut rng = thread_rng();
+    for (a, b) in (-11..11).cartesian_product(-11..11) {
+        let choose_mat = rng.gen::<f64>();
+        let center = dvec3(
+            a as f64 + 0.9 * rng.gen::<f64>(),
+            0.2,
+            b as f64 + 0.9 * rng.gen::<f64>(),
+        );
+
+        if (center - dvec3(4., 0.2, 0.)).length_squared() > 0.9 * 0.9 {
+            if choose_mat < 0.8 {
+                let mat = Rc::new(Lambertian { albedo: rng.gen() });
+                world.add(Sphere::new(center, 0.2, mat));
+            } else if choose_mat < 0.95 {
+                let mat = Rc::new(Metallic {
+                    albedo: rng.gen(),
+                    fuzz: rng.gen_range(0.0..0.5),
+                });
+                world.add(Sphere::new(center, 0.2, mat));
+            } else {
+                let mat = Rc::new(Dielectric {
+                    refraction_idx: 1.5,
+                });
+                world.add(Sphere::new(center, 0.2, mat));
+            };
+        }
+    }
+
+    let mat1 = Rc::new(Dielectric {
+        refraction_idx: 1.5,
+    });
+    world.add(Sphere::new(DVec3::Y, 1., mat1));
+
+    let mat2 = Rc::new(Lambertian {
+        albedo: dvec3(0.4, 0.2, 0.1),
+    });
+    world.add(Sphere::new(dvec3(-4., 1., 0.), 1., mat2));
+
+    let mat3 = Rc::new(Metallic {
+        albedo: dvec3(0.7, 0.6, 0.5),
+        fuzz: 0.0,
+    });
+    world.add(Sphere::new(dvec3(4., 1., 0.), 1., mat3));
+
+    let camera = Camera::new(CameraSettings {
+        image_width: 1200,
+        aspect_ratio: 16. / 9.,
+        samples_per_pixel: 10,
+        max_depth: 50,
+        look_from: Some(dvec3(13., 2., 3.)),
+        look_at: Some(dvec3(0., 0., 0.)),
+        view_up: Some(DVec3::Y),
+        vfov: Some(20.),
+        defocus_angle: Some(0.0),
+        focus_dist: Some(10.),
+    });
     camera.render_to_disk(&world)?;
     Ok(())
 }
