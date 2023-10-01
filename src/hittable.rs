@@ -44,33 +44,11 @@ impl<'a> HitRecord<'a> {
 
         (front_face, normal)
     }
-
-    // TODO: is this necessary?
-    pub fn set_face_normal(&mut self, ray: &Ray, outward_normal: DVec3) {
-        let (front_face, normal) = Self::calc_face_normal(ray, outward_normal);
-
-        self.front_face = front_face;
-        self.normal = normal;
-    }
 }
 
-pub struct HittableList {
-    pub objects: Vec<Box<dyn Hittable + Sync>>,
-}
-
-impl HittableList {
-    pub fn clear(&mut self) {
-        self.objects.clear();
-    }
-
-    pub fn add(&mut self, object: impl Hittable + 'static + Sync) {
-        self.objects.push(Box::new(object));
-    }
-}
-
-impl Hittable for HittableList {
+impl<T: Hittable> Hittable for Vec<T> {
     fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord> {
-        let (_closest, hit) = self.objects.iter().fold((interval.end, None), |acc, obj| {
+        let (_closest, hit) = self.iter().fold((interval.end, None), |acc, obj| {
             if let Some(hit) = obj.hit(ray, interval.start..acc.0) {
                 (hit.t, Some(hit))
             } else {
