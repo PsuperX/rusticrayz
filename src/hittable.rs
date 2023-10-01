@@ -55,7 +55,7 @@ impl<'a> HitRecord<'a> {
 }
 
 pub struct HittableList {
-    pub objects: Vec<Box<dyn Hittable>>,
+    pub objects: Vec<Box<dyn Hittable + Sync>>,
 }
 
 impl HittableList {
@@ -63,7 +63,7 @@ impl HittableList {
         self.objects.clear();
     }
 
-    pub fn add(&mut self, object: impl Hittable + 'static) {
+    pub fn add(&mut self, object: impl Hittable + 'static + Sync) {
         self.objects.push(Box::new(object));
     }
 }

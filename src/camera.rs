@@ -1,8 +1,9 @@
 use crate::{hittable::Hittable, ray::Ray, vectors::Dvec3Extensions};
 use glam::{dvec3, DVec3};
-use indicatif::ProgressIterator;
+use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
+use rayon::prelude::*;
 use std::{fs, io};
 
 pub struct CameraSettings {
@@ -91,9 +92,11 @@ impl Camera {
         }
     }
 
-    pub fn render_to_disk(&self, world: &impl Hittable) -> io::Result<()> {
+    pub fn render_to_disk(&self, world: &(impl Hittable + Sync)) -> io::Result<()> {
         let pixels = (0..self.image_height)
             .cartesian_product(0..self.image_width)
+            .collect_vec()
+            .into_par_iter()
             .progress_count(self.image_width as u64 * self.image_height as u64)
             .map(|(y, x)| {
                 let multisampled_pixel_color = (0..self.samples_per_pixel)
@@ -104,8 +107,13 @@ impl Camera {
                 let mut pixel_color = scale * multisampled_pixel_color;
                 pixel_color = 255.
                     * linear_to_gamma(pixel_color).clamp(DVec3::splat(0.), DVec3::splat(0.999));
-                format!("{} {} {}", pixel_color.x, pixel_color.y, pixel_color.z)
+                format!("{} {} {} ", pixel_color.x, pixel_color.y, pixel_color.z)
             })
+            .fold(String::new, |mut acc: String, cur: String| {
+                acc.push_str(&cur);
+                acc
+            })
+            .collect::<Vec<_>>()
             .join(" ");
         fs::write(
             "image.ppm",

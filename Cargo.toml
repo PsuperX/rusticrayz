@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 glam = { version = "0.24.1", features = ["rand"] }
 itertools = "0.11.0"
-indicatif = "0.17.6"
+indicatif = { version = "0.17.6", features = ["rayon"] }
 rand = "0.8.5"
+rayon = "1.8.0"
