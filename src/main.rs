@@ -60,6 +60,8 @@ fn main() -> io::Result<()> {
         look_at,
         view_up,
         Some(20.),
+        Some(10.),
+        Some(3.4),
     );
     camera.render_to_disk(&world)?;
     Ok(())

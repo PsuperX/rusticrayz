@@ -1,8 +1,9 @@
-use glam::DVec3;
+use glam::{dvec3, DVec3};
 use rand::{thread_rng, Rng};
 
 pub trait Dvec3Extensions {
     fn random_in_unit_sphere() -> Self;
+    fn random_in_unit_disk() -> Self;
     fn random_unit_vector() -> Self;
     fn reflect(self, n: Self) -> Self;
     fn refract(self, normal: Self, etai_over_etat: f64) -> Self;
@@ -13,12 +14,22 @@ impl Dvec3Extensions for DVec3 {
     fn random_in_unit_sphere() -> Self {
         let mut rng = thread_rng();
         loop {
-            let p = DVec3::new(
+            let p = dvec3(
                 rng.gen_range((-1.)..1.),
                 rng.gen_range((-1.)..1.),
                 rng.gen_range((-1.)..1.),
             );
 
+            if p.length_squared() < 1. {
+                return p;
+            }
+        }
+    }
+
+    fn random_in_unit_disk() -> Self {
+        let mut rng = thread_rng();
+        loop {
+            let p = dvec3(rng.gen_range((-1.)..1.), rng.gen_range((-1.)..1.), 0.);
             if p.length_squared() < 1. {
                 return p;
             }
