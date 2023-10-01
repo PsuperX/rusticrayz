@@ -16,31 +16,50 @@ pub struct Camera {
     samples_per_pixel: u32,
     max_depth: u32,
     vfov: f64,
+    look_from: DVec3,
+    look_at: DVec3,
+    view_up: DVec3,
 }
 
 impl Camera {
-    pub fn new(image_width: u32, aspect_ratio: f64) -> Self {
+    pub fn new(
+        image_width: u32,
+        aspect_ratio: f64,
+        look_from: Option<DVec3>,
+        look_at: Option<DVec3>,
+        view_up: Option<DVec3>,
+        vfov: Option<f64>,
+    ) -> Self {
+        let look_from = look_from.unwrap_or(DVec3::NEG_Z);
+        let look_at = look_at.unwrap_or(DVec3::ZERO);
+        let view_up = view_up.unwrap_or(DVec3::Y);
+        let vfov = vfov.unwrap_or(20.);
+
         let image_height = if ((image_width as f64 / aspect_ratio) as u32) < 1 {
             1
         } else {
             (image_width as f64 / aspect_ratio) as u32
         };
 
-        let focal_lenght = 1.;
-        let vfov = 90f64;
+        let center = look_from;
+
+        // Viewport dimensions
+        let focal_lenght = (look_from - look_at).length();
         let theta = vfov.to_radians();
         let h = (theta / 2.).tan();
         let viewport_height = 2. * h * focal_lenght;
         let viewport_width = viewport_height * (image_width as f64 / image_height as f64);
-        let center = DVec3::ZERO;
 
-        let viewport_u = dvec3(viewport_width, 0., 0.);
-        let viewport_v = dvec3(0., -viewport_height, 0.);
+        let w = (look_from - look_at).normalize();
+        let u = view_up.cross(w).normalize();
+        let v = w.cross(u);
+
+        let viewport_u = viewport_width * u;
+        let viewport_v = -viewport_height * v;
         let pixel_delta_u = viewport_u / image_width as f64;
         let pixel_delta_v = viewport_v / image_height as f64;
 
-        let viewport_upper_left =
-            center - dvec3(0., 0., focal_lenght) - viewport_u / 2. - viewport_v / 2.;
+        let viewport_upper_left = center - (focal_lenght * w) - viewport_u / 2. - viewport_v / 2.;
 
         let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
@@ -55,6 +74,9 @@ impl Camera {
             samples_per_pixel: 100,
             max_depth: 50,
             vfov,
+            look_from,
+            look_at,
+            view_up,
         }
     }
 
