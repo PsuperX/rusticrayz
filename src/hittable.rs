@@ -46,7 +46,7 @@ impl<'a> HitRecord<'a> {
     }
 }
 
-impl<T: Hittable> Hittable for Vec<T> {
+impl<T: Hittable> Hittable for &[T] {
     fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord> {
         let (_closest, hit) = self.iter().fold((interval.end, None), |acc, obj| {
             if let Some(hit) = obj.hit(ray, interval.start..acc.0) {

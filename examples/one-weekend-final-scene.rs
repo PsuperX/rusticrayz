@@ -71,6 +71,6 @@ fn main() -> io::Result<()> {
         defocus_angle: Some(0.0),
         focus_dist: Some(10.),
     });
-    camera.render_to_disk(&world)?;
+    camera.render_to_disk(&world.as_slice())?;
     Ok(())
 }
