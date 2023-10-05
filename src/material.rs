@@ -4,18 +4,22 @@ use crate::{
     ray::Ray,
     vectors::{reflectance, Dvec3Extensions},
 };
+use dyn_clone::{clone_trait_object, DynClone};
 use glam::DVec3;
 use rand::{thread_rng, Rng};
 
-pub trait Material {
+pub trait Material: DynClone {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered>;
 }
+
+clone_trait_object!(Material);
 
 pub struct Scattered {
     pub ray: Ray,
     pub attenuation: Color,
 }
 
+#[derive(Clone)]
 pub struct Lambertian {
     pub albedo: Color,
 }
@@ -36,6 +40,7 @@ impl Material for Lambertian {
     }
 }
 
+#[derive(Clone)]
 pub struct Metallic {
     pub albedo: Color,
     pub fuzz: f64,
@@ -54,6 +59,7 @@ impl Material for Metallic {
     }
 }
 
+#[derive(Clone)]
 pub struct Dielectric {
     pub refraction_idx: f64,
 }

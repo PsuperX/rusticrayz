@@ -1,30 +1,35 @@
-use std::{ops::Range, sync::Arc};
-
 use crate::{
+    aabb::AABB,
     hittable::{HitRecord, Hittable},
     material::Material,
     ray::Ray,
 };
 use glam::DVec3;
+use std::{ops::Range, sync::Arc};
 
+#[derive(Clone)]
 pub struct Sphere {
     pub center: DVec3,
     pub radius: f64,
     pub material: Arc<dyn Material + Sync + Send>,
+    bbox: AABB,
 }
 
 impl Sphere {
     pub fn new(center: DVec3, radius: f64, material: Arc<dyn Material + Sync + Send>) -> Self {
+        let rvec = DVec3::splat(radius);
+        let bbox = AABB::new(center - rvec, center + rvec);
         Self {
             center,
             radius,
             material,
+            bbox,
         }
     }
 }
 
 impl Hittable for Sphere {
-    fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
         let ac = ray.orig - self.center;
         let a = ray.dir.length_squared();
         let half_b = ray.dir.dot(ac);
@@ -55,5 +60,9 @@ impl Hittable for Sphere {
             ray,
             self.material.as_ref(),
         ))
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        &self.bbox
     }
 }

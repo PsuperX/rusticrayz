@@ -1,10 +1,15 @@
-use crate::{material::Material, ray::Ray};
+use crate::{aabb::AABB, material::Material, ray::Ray};
+use dyn_clone::{clone_trait_object, DynClone};
 use glam::DVec3;
 use std::ops::Range;
 
-pub trait Hittable {
-    fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord>;
+pub trait Hittable: DynClone {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord>;
+
+    fn bounding_box(&self) -> &AABB;
 }
+
+clone_trait_object!(Hittable);
 
 pub struct HitRecord<'a> {
     pub point: DVec3,
@@ -46,10 +51,40 @@ impl<'a> HitRecord<'a> {
     }
 }
 
-impl<T: Hittable> Hittable for &[T] {
-    fn hit(&self, ray: &Ray, interval: Range<f64>) -> Option<HitRecord> {
-        let (_closest, hit) = self.iter().fold((interval.end, None), |acc, obj| {
-            if let Some(hit) = obj.hit(ray, interval.start..acc.0) {
+#[derive(Default, Clone)]
+pub struct HittableList {
+    pub objects: Vec<Box<dyn Hittable + Sync>>,
+    bbox: AABB,
+}
+
+impl HittableList {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn from_vec(objects: Vec<Box<dyn Hittable + Sync>>) -> Self {
+        Self {
+            bbox: objects
+                .iter()
+                .fold(AABB::default(), |acc, cur| acc.merge(cur.bounding_box())),
+            objects,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.objects.clear();
+    }
+
+    pub fn add(&mut self, object: impl Hittable + 'static + Sync) {
+        self.bbox = self.bbox.merge(object.bounding_box());
+        self.objects.push(Box::new(object));
+    }
+}
+
+impl Hittable for HittableList {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        let (_closest, hit) = self.objects.iter().fold((interval.end, None), |acc, obj| {
+            if let Some(hit) = obj.hit(ray, &(interval.start..acc.0)) {
                 (hit.t, Some(hit))
             } else {
                 acc
@@ -57,5 +92,20 @@ impl<T: Hittable> Hittable for &[T] {
         });
 
         hit
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        &self.bbox
+    }
+}
+
+impl From<Vec<Box<(dyn Hittable + Sync)>>> for HittableList {
+    fn from(value: Vec<Box<(dyn Hittable + Sync)>>) -> Self {
+        Self {
+            bbox: value.iter().fold(AABB::default(), |acc, cur| {
+                AABB::merge(&acc, cur.bounding_box())
+            }),
+            objects: value,
+        }
     }
 }
