@@ -2,7 +2,7 @@ use glam::{dvec3, DVec3};
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use rusticrayz::{
-    bvh::BvhNode,
+    bvh::Bvh,
     camera::{Camera, CameraSettings},
     color::Color,
     hittable::HittableList,
@@ -63,7 +63,7 @@ fn main() -> io::Result<()> {
     });
     world.add(Sphere::new(dvec3(4., 1., 0.), 1., mat3));
 
-    let world = BvhNode::new(world.objects);
+    let world = Bvh::new(world.objects);
 
     let camera = Camera::new(CameraSettings {
         image_width: 1200,

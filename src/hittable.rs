@@ -109,3 +109,43 @@ impl From<Vec<Box<(dyn Hittable + Sync)>>> for HittableList {
         }
     }
 }
+
+impl Hittable for Box<dyn Hittable> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        self.as_ref().hit(ray, interval)
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        self.as_ref().bounding_box()
+    }
+}
+
+impl Hittable for Box<dyn Hittable + Send> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        self.as_ref().hit(ray, interval)
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        self.as_ref().bounding_box()
+    }
+}
+
+impl Hittable for Box<dyn Hittable + Sync> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        self.as_ref().hit(ray, interval)
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        self.as_ref().bounding_box()
+    }
+}
+
+impl Hittable for Box<dyn Hittable + Sync + Send> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        self.as_ref().hit(ray, interval)
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        self.as_ref().bounding_box()
+    }
+}

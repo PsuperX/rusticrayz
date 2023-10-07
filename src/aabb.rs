@@ -1,8 +1,8 @@
 use crate::ray::Ray;
-use glam::DVec3;
-use std::{mem, ops::Range};
+use glam::{dvec3, DVec3};
+use std::{cmp::Ordering, mem, ops::Range};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct AABB {
     x: Range<f64>,
     y: Range<f64>,
@@ -10,6 +10,15 @@ pub struct AABB {
 }
 
 impl AABB {
+    /// An empty `Aabb` should not contain any point
+    pub fn empty() -> Self {
+        Self {
+            x: f64::INFINITY..f64::NEG_INFINITY,
+            y: f64::INFINITY..f64::NEG_INFINITY,
+            z: f64::INFINITY..f64::NEG_INFINITY,
+        }
+    }
+
     pub fn new(a: DVec3, b: DVec3) -> Self {
         Self {
             x: a.x.min(b.x)..a.x.max(b.x),
@@ -24,6 +33,18 @@ impl AABB {
             y: merge_range(&self.y, &other.y),
             z: merge_range(&self.z, &other.z),
         }
+    }
+
+    pub fn grow(&self, other: &DVec3) -> Self {
+        Self {
+            x: self.x.start.min(other.x)..self.x.end.max(other.x),
+            y: self.y.start.min(other.y)..self.y.end.max(other.y),
+            z: self.z.start.min(other.z)..self.z.end.max(other.z),
+        }
+    }
+
+    pub fn contains(&self, point: &DVec3) -> bool {
+        self.x.contains(&point.x) && self.y.contains(&point.y) && self.z.contains(&point.z)
     }
 
     pub fn axis(&self, n: usize) -> &Range<f64> {
@@ -53,6 +74,46 @@ impl AABB {
             }
         }
         true
+    }
+
+    pub fn center(&self) -> DVec3 {
+        dvec3(
+            (self.x.end + self.x.start) / 2.,
+            (self.y.end + self.y.start) / 2.,
+            (self.z.end + self.z.start) / 2.,
+        )
+    }
+
+    pub fn surface_area(&self) -> f64 {
+        let size = dvec3(self.x.end, self.y.end, self.x.end)
+            - dvec3(self.x.start, self.y.start, self.x.start);
+        2. * size.dot(size)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.x.is_empty() && self.y.is_empty() && self.z.is_empty()
+    }
+
+    pub fn largest_axis(&self) -> usize {
+        // Safety: Array is always of lenght 3
+        unsafe {
+            [
+                self.x.end - self.x.start,
+                self.y.end - self.y.start,
+                self.z.end - self.z.start,
+            ]
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+            .unwrap_unchecked()
+            .0
+        }
+    }
+}
+
+impl Default for AABB {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 
