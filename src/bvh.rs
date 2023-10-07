@@ -49,7 +49,7 @@ impl BvhNode {
 
         // Helper function to accumulate the AABB joint and the centroids AABB
         fn grow_convex_hull(convex_hull: (AABB, AABB), shape_aabb: &AABB) -> (AABB, AABB) {
-            let center = &shape_aabb.center();
+            let center = shape_aabb.center();
             let convex_hull_aabbs = &convex_hull.0;
             let convex_hull_centroids = &convex_hull.1;
             (
@@ -71,8 +71,7 @@ impl BvhNode {
 
         // Find the axis along which the shapes are spread the most.
         let split_axis = centroid_bounds.largest_axis();
-        let split_axis_size =
-            centroid_bounds.axis(split_axis).end - centroid_bounds.axis(split_axis).start;
+        let split_axis_size = centroid_bounds.max[split_axis] - centroid_bounds.min[split_axis];
 
         // The following `if` partitions `indices` for recursively calling `Bvh::build`.
         let (child_l_index, child_l_aabb, child_r_index, child_r_aabb) = if split_axis_size
@@ -102,9 +101,8 @@ impl BvhNode {
                 let shape_center = shape_aabb.center();
 
                 // Get the relative position of the shape centroid `[0.0..1.0]`.
-                let bucket_num_relative = (shape_center[split_axis]
-                    - centroid_bounds.axis(split_axis).start)
-                    / split_axis_size;
+                let bucket_num_relative =
+                    (shape_center[split_axis] - centroid_bounds.min[split_axis]) / split_axis_size;
 
                 // Convert that to the actual `Bucket` number.
                 let bucket_num = (bucket_num_relative * NUM_BUCKETS as f64 - 0.01) as usize;
