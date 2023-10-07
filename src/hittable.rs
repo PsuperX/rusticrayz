@@ -1,15 +1,12 @@
 use crate::{aabb::AABB, material::Material, ray::Ray};
-use dyn_clone::{clone_trait_object, DynClone};
 use glam::DVec3;
 use std::ops::Range;
 
-pub trait Hittable: DynClone {
+pub trait Hittable {
     fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord>;
 
     fn bounding_box(&self) -> &AABB;
 }
-
-clone_trait_object!(Hittable);
 
 pub struct HitRecord<'a> {
     pub point: DVec3,
@@ -52,17 +49,20 @@ impl<'a> HitRecord<'a> {
 }
 
 #[derive(Default, Clone)]
-pub struct HittableList {
-    pub objects: Vec<Box<dyn Hittable + Sync>>,
+pub struct HittableList<T: Hittable> {
+    pub objects: Vec<T>,
     bbox: AABB,
 }
 
-impl HittableList {
+impl<T: Hittable> HittableList<T> {
     pub fn new() -> Self {
-        Default::default()
+        Self {
+            objects: Vec::new(),
+            bbox: AABB::empty(),
+        }
     }
 
-    pub fn from_vec(objects: Vec<Box<dyn Hittable + Sync>>) -> Self {
+    pub fn from_vec(objects: Vec<T>) -> Self {
         Self {
             bbox: objects
                 .iter()
@@ -75,13 +75,13 @@ impl HittableList {
         self.objects.clear();
     }
 
-    pub fn add(&mut self, object: impl Hittable + 'static + Sync) {
+    pub fn add(&mut self, object: T) {
         self.bbox = self.bbox.merge(object.bounding_box());
-        self.objects.push(Box::new(object));
+        self.objects.push(object);
     }
 }
 
-impl Hittable for HittableList {
+impl<T: Hittable> Hittable for HittableList<T> {
     fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
         let (_closest, hit) = self.objects.iter().fold((interval.end, None), |acc, obj| {
             if let Some(hit) = obj.hit(ray, &(interval.start..acc.0)) {
@@ -99,8 +99,8 @@ impl Hittable for HittableList {
     }
 }
 
-impl From<Vec<Box<(dyn Hittable + Sync)>>> for HittableList {
-    fn from(value: Vec<Box<(dyn Hittable + Sync)>>) -> Self {
+impl<T: Hittable> From<Vec<T>> for HittableList<T> {
+    fn from(value: Vec<T>) -> Self {
         Self {
             bbox: value.iter().fold(AABB::default(), |acc, cur| {
                 AABB::merge(&acc, cur.bounding_box())

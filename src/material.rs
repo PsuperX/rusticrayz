@@ -4,15 +4,12 @@ use crate::{
     ray::Ray,
     vectors::{reflectance, Dvec3Extensions},
 };
-use dyn_clone::{clone_trait_object, DynClone};
 use glam::DVec3;
 use rand::{thread_rng, Rng};
 
-pub trait Material: DynClone {
+pub trait Material {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered>;
 }
-
-clone_trait_object!(Material);
 
 pub struct Scattered {
     pub ray: Ray,
