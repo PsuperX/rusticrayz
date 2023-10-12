@@ -2,6 +2,7 @@ use crate::{
     color::Color,
     hittable::HitRecord,
     ray::Ray,
+    texture::Texture,
     vectors::{reflectance, Dvec3Extensions},
 };
 use glam::DVec3;
@@ -17,11 +18,17 @@ pub struct Scattered {
 }
 
 #[derive(Clone)]
-pub struct Lambertian {
-    pub albedo: Color,
+pub struct Lambertian<T>
+where
+    T: Texture,
+{
+    pub albedo: T,
 }
 
-impl Material for Lambertian {
+impl<T> Material for Lambertian<T>
+where
+    T: Texture,
+{
     fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<Scattered> {
         let mut scatter_dir = hit.normal + DVec3::random_unit_vector();
 
@@ -32,7 +39,7 @@ impl Material for Lambertian {
 
         Some(Scattered {
             ray: Ray::new(hit.point, scatter_dir),
-            attenuation: self.albedo,
+            attenuation: self.albedo.color(hit.u, hit.v, hit.point),
         })
     }
 }

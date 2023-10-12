@@ -4,19 +4,22 @@ use rand::{thread_rng, Rng};
 use rusticrayz::{
     bvh::Bvh,
     camera::{Camera, CameraSettings},
-    color::Color,
     hittable::HittableList,
     material::*,
     sphere::Sphere,
+    texture::*,
 };
 use std::{io, sync::Arc};
 
 fn main() -> io::Result<()> {
     let mut world = HittableList::new();
 
-    let material_ground = Arc::new(Lambertian {
-        albedo: Color::new(0.5, 0.5, 0.5),
-    });
+    let checker: CheckerTexture<SolidColor, SolidColor> = CheckerTexture::new(
+        0.32,
+        dvec3(0.2, 0.3, 0.1).into(),
+        dvec3(0.9, 0.9, 0.9).into(),
+    );
+    let material_ground = Arc::new(Lambertian { albedo: checker });
     world.add(Sphere::new(dvec3(0., -1000., 0.), 1000., material_ground));
 
     let mut rng = thread_rng();
@@ -30,7 +33,9 @@ fn main() -> io::Result<()> {
 
         if (center - dvec3(4., 0.2, 0.)).length_squared() > 0.9 * 0.9 {
             if choose_mat < 0.8 {
-                let mat = Arc::new(Lambertian { albedo: rng.gen() });
+                let mat = Arc::new(Lambertian::<SolidColor> {
+                    albedo: rng.gen::<DVec3>().into(),
+                });
                 world.add(Sphere::new(center, 0.2, mat));
             } else if choose_mat < 0.95 {
                 let mat = Arc::new(Metallic {
@@ -52,8 +57,8 @@ fn main() -> io::Result<()> {
     });
     world.add(Sphere::new(DVec3::Y, 1., mat1));
 
-    let mat2 = Arc::new(Lambertian {
-        albedo: dvec3(0.4, 0.2, 0.1),
+    let mat2 = Arc::new(Lambertian::<SolidColor> {
+        albedo: dvec3(0.4, 0.2, 0.1).into(),
     });
     world.add(Sphere::new(dvec3(-4., 1., 0.), 1., mat2));
 

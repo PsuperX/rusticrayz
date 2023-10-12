@@ -12,6 +12,8 @@ pub struct HitRecord<'a> {
     pub point: DVec3,
     pub normal: DVec3,
     pub t: f64,
+    pub u: f64,
+    pub v: f64,
     pub front_face: bool,
     pub material: &'a dyn Material,
 }
@@ -31,6 +33,9 @@ impl<'a> HitRecord<'a> {
             point,
             normal,
             t,
+            // TODO: this
+            u: 0.,
+            v: 0.,
             front_face,
             material,
         }
