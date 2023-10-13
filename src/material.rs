@@ -2,7 +2,7 @@ use crate::{
     color::Color,
     hittable::HitRecord,
     ray::Ray,
-    texture::Texture,
+    texture::{SolidColor, Texture},
     vectors::{reflectance, Dvec3Extensions},
 };
 use glam::DVec3;
@@ -23,6 +23,21 @@ where
     T: Texture,
 {
     pub albedo: T,
+}
+
+impl<T> Lambertian<T>
+where
+    T: Texture,
+{
+    pub fn new(albedo: T) -> Self {
+        Self { albedo }
+    }
+
+    pub fn from_color(albedo: Color) -> Lambertian<SolidColor> {
+        Lambertian {
+            albedo: SolidColor::from(albedo),
+        }
+    }
 }
 
 impl<T> Material for Lambertian<T>

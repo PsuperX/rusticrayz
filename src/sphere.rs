@@ -5,7 +5,11 @@ use crate::{
     ray::Ray,
 };
 use glam::DVec3;
-use std::{ops::Range, sync::Arc};
+use std::{
+    f64::consts::PI,
+    ops::{Neg, Range},
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct Sphere {
@@ -25,6 +29,20 @@ impl Sphere {
             material,
             bbox,
         }
+    }
+
+    fn get_sphere_uv(&self, point: &DVec3) -> (f64, f64) {
+        // p: a given point on the sphere of radius one, centered at the origin.
+        // u: returned value [0,1] of angle around the Y axis from X=-1.
+        // v: returned value [0,1] of angle from Y=-1 to Y=+1.
+        //     <1 0 0> yields <0.50 0.50>       <-1  0  0> yields <0.00 0.50>
+        //     <0 1 0> yields <0.50 1.00>       < 0 -1  0> yields <0.50 0.00>
+        //     <0 0 1> yields <0.25 0.50>       < 0  0 -1> yields <0.75 0.50>
+
+        let theta = point.y.neg().acos();
+        let phi = point.z.neg().atan2(point.x) + PI;
+
+        (phi / (2. * PI), theta / PI)
     }
 }
 
@@ -53,10 +71,13 @@ impl Hittable for Sphere {
         let t = root;
         let point = ray.at(t);
         let outward_normal = (point - self.center) / self.radius;
+        let (u, v) = self.get_sphere_uv(&outward_normal);
         Some(HitRecord::with_face_normal(
             point,
             outward_normal,
             t,
+            u,
+            v,
             ray,
             self.material.as_ref(),
         ))

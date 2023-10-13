@@ -1,5 +1,7 @@
 use crate::color::Color;
-use glam::DVec3;
+use glam::{dvec3, DVec3};
+use image::{DynamicImage, GenericImageView};
+use std::path::Path;
 
 pub trait Texture {
     fn color(&self, u: f64, v: f64, point: DVec3) -> Color;
@@ -56,6 +58,37 @@ where
         } else {
             self.odd.color(u, v, point)
         }
+    }
+}
+
+pub struct ImageTexture {
+    image: DynamicImage,
+}
+
+impl ImageTexture {
+    pub fn load_image(path: impl AsRef<Path>) -> image::ImageResult<Self> {
+        let image = image::open(path)?;
+        Ok(Self { image })
+    }
+}
+
+impl Texture for ImageTexture {
+    fn color(&self, u: f64, v: f64, _point: DVec3) -> Color {
+        // If we have no texture data, then return solid cyan as a debugging aid.
+        if self.image.height() == 0 {
+            return dvec3(0., 1., 1.);
+        }
+
+        // Clamp input texture coorenates to [0,1] x [1,0]
+        let u = u.clamp(0., 1.);
+        let v = 1. - v.clamp(0., 1.);
+
+        let i = (u * self.image.width() as f64) as u32;
+        let j = (v * self.image.height() as f64) as u32;
+        let pixel = self.image.get_pixel(i, j);
+
+        let color_scale = 1. / 255.;
+        dvec3(pixel[0] as f64, pixel[1] as f64, pixel[2] as f64) * color_scale
     }
 }
 

@@ -11,15 +11,9 @@ use std::{io, sync::Arc};
 fn main() -> io::Result<()> {
     let mut world = vec![];
 
-    let checker: CheckerTexture<SolidColor, SolidColor> =
-        CheckerTexture::new(0.32, dvec3(0.2, 0.3, 0.1).into(), DVec3::splat(0.9).into());
-    let checker_material = Arc::new(Lambertian::new(checker));
-    world.push(Sphere::new(
-        dvec3(0., -10., 0.),
-        10.,
-        checker_material.clone(),
-    ));
-    world.push(Sphere::new(dvec3(0., 10., 0.), 10., checker_material));
+    let earth_texture = ImageTexture::load_image("assets/earth.jpg").unwrap();
+    let earth_surface = Arc::new(Lambertian::new(earth_texture));
+    world.push(Sphere::new(dvec3(0., 0., 0.), 2., earth_surface));
 
     let world = Bvh::new(world);
     let camera = Camera::new(CameraSettings {
@@ -27,7 +21,7 @@ fn main() -> io::Result<()> {
         aspect_ratio: 16. / 9.,
         samples_per_pixel: 100,
         max_depth: 50,
-        look_from: Some(dvec3(13., 2., 3.)),
+        look_from: Some(dvec3(0., 0., 12.)),
         look_at: Some(DVec3::ZERO),
         view_up: Some(DVec3::Y),
         vfov: Some(20.),

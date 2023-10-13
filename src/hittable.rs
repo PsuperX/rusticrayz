@@ -24,6 +24,8 @@ impl<'a> HitRecord<'a> {
         point: DVec3,
         outward_normal: DVec3,
         t: f64,
+        u: f64,
+        v: f64,
         ray: &Ray,
         material: &'a dyn Material,
     ) -> Self {
@@ -33,9 +35,8 @@ impl<'a> HitRecord<'a> {
             point,
             normal,
             t,
-            // TODO: this
-            u: 0.,
-            v: 0.,
+            u,
+            v,
             front_face,
             material,
         }
