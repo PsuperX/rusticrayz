@@ -13,7 +13,7 @@ fn main() -> io::Result<()> {
     let mut world = vec![];
 
     let seed = rand::thread_rng().gen();
-    let noise_tex = NoiseTexture::new(4., seed);
+    let noise_tex = TurbulenceTexture::new(4., seed);
     let noise_material = Arc::new(Lambertian::new(noise_tex));
     world.push(Sphere::new(
         dvec3(0., -1000., 0.),

@@ -1,7 +1,7 @@
 use crate::color::Color;
 use glam::{dvec3, DVec3};
 use image::{DynamicImage, GenericImageView};
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Perlin, Turbulence};
 use std::path::Path;
 
 pub trait Texture {
@@ -116,5 +116,26 @@ impl NoiseTexture {
 impl Texture for NoiseTexture {
     fn color(&self, _u: f64, _v: f64, point: DVec3) -> Color {
         (1.0 + self.noise.get((self.scale * point).into())) * 0.5 * DVec3::ONE
+    }
+}
+
+pub struct TurbulenceTexture {
+    noise: Turbulence<Perlin, Perlin>,
+    scale: f64,
+}
+
+impl TurbulenceTexture {
+    pub fn new(scale: f64, seed: u32) -> Self {
+        Self {
+            noise: Turbulence::new(Perlin::new(seed)),
+            scale,
+        }
+    }
+}
+
+impl Texture for TurbulenceTexture {
+    fn color(&self, _u: f64, _v: f64, point: DVec3) -> Color {
+        let s = self.scale * point;
+        (1.0 + s.z.sin() + 3.5 * self.noise.get(s.into())) * 0.5 * DVec3::ONE
     }
 }
