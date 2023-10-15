@@ -3,7 +3,7 @@ use rusticrayz::{
     bvh::Bvh,
     camera::{Camera, CameraSettings},
     material::*,
-    sphere::Sphere,
+    shapes::Sphere,
     texture::*,
 };
 use std::{io, sync::Arc};

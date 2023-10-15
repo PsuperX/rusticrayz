@@ -6,7 +6,7 @@ use rusticrayz::{
     camera::{Camera, CameraSettings},
     hittable::HittableList,
     material::*,
-    sphere::Sphere,
+    shapes::Sphere,
     texture::*,
 };
 use std::{io, sync::Arc};

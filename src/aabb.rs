@@ -38,6 +38,14 @@ impl AABB {
         }
     }
 
+    pub fn pad(&self) -> Self {
+        let delta = 0.0001;
+        Self {
+            min: self.min - delta,
+            max: self.max + delta,
+        }
+    }
+
     pub fn contains(&self, point: &DVec3) -> bool {
         point.x >= self.min.x
             && point.x <= self.max.x

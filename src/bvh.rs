@@ -193,7 +193,7 @@ impl BvhNode {
     }
 }
 
-impl<T: Hittable + Clone> Hittable for Bvh<T> {
+impl<T: Hittable> Hittable for Bvh<T> {
     fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
         BvhNode::traverse(&self.nodes, 0, ray, interval, &self.objects)
     }
