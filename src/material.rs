@@ -10,6 +10,10 @@ use rand::{thread_rng, Rng};
 
 pub trait Material {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scattered>;
+
+    fn emitted(&self, _u: f64, _v: f64, _point: Color) -> Color {
+        Color::ZERO
+    }
 }
 
 pub struct Scattered {
@@ -32,9 +36,11 @@ where
     pub fn new(albedo: T) -> Self {
         Self { albedo }
     }
+}
 
-    pub fn from_color(albedo: Color) -> Lambertian<SolidColor> {
-        Lambertian {
+impl Lambertian<SolidColor> {
+    pub fn from_color(albedo: Color) -> Self {
+        Self {
             albedo: SolidColor::from(albedo),
         }
     }
@@ -107,5 +113,40 @@ impl Material for Dielectric {
             ray: Ray::new(hit.point, direction),
             attenuation: Color::ONE,
         })
+    }
+}
+
+pub struct DiffuseLight<T>
+where
+    T: Texture,
+{
+    emit: T,
+}
+
+impl<T> DiffuseLight<T>
+where
+    T: Texture,
+{
+    pub fn new(emit: T) -> Self {
+        Self { emit }
+    }
+}
+
+impl DiffuseLight<SolidColor> {
+    pub fn from_color(emit: Color) -> Self {
+        Self { emit: emit.into() }
+    }
+}
+
+impl<T> Material for DiffuseLight<T>
+where
+    T: Texture,
+{
+    fn scatter(&self, _ray: &Ray, _hit: &HitRecord) -> Option<Scattered> {
+        None
+    }
+
+    fn emitted(&self, u: f64, v: f64, point: Color) -> Color {
+        self.emit.color(u, v, point)
     }
 }

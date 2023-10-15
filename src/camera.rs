@@ -1,4 +1,4 @@
-use crate::{hittable::Hittable, ray::Ray, vectors::Dvec3Extensions};
+use crate::{color::Color, hittable::Hittable, ray::Ray, vectors::Dvec3Extensions};
 use glam::{dvec3, DVec3};
 use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
@@ -11,6 +11,7 @@ pub struct CameraSettings {
     pub aspect_ratio: f64,
     pub samples_per_pixel: u32,
     pub max_depth: u32,
+    pub background: Option<Color>,
     pub look_from: Option<DVec3>,
     pub look_at: Option<DVec3>,
     pub view_up: Option<DVec3>,
@@ -29,6 +30,7 @@ pub struct Camera {
     pixel_delta_u: DVec3,
     samples_per_pixel: u32,
     max_depth: u32,
+    background: Option<Color>,
     defocus_angle: f64,
     defocus_disk_u: DVec3,
     defocus_disk_v: DVec3,
@@ -86,6 +88,7 @@ impl Camera {
             pixel_delta_u,
             samples_per_pixel: settings.samples_per_pixel,
             max_depth: settings.max_depth,
+            background: settings.background,
             defocus_angle,
             defocus_disk_u,
             defocus_disk_v,
@@ -100,7 +103,10 @@ impl Camera {
             .progress_count(self.image_width as u64 * self.image_height as u64)
             .map(|(y, x)| {
                 let multisampled_pixel_color = (0..self.samples_per_pixel)
-                    .map(|_| self.get_ray(x, y).color(self.max_depth, world))
+                    .map(|_| {
+                        self.get_ray(x, y)
+                            .color(self.max_depth, world, &self.background)
+                    })
                     .sum::<DVec3>();
 
                 let scale = 1. / self.samples_per_pixel as f64;

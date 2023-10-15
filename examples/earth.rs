@@ -21,6 +21,7 @@ fn main() -> io::Result<()> {
         aspect_ratio: 16. / 9.,
         samples_per_pixel: 100,
         max_depth: 50,
+        background: None,
         look_from: Some(dvec3(0., 0., 12.)),
         look_at: Some(DVec3::ZERO),
         view_up: Some(DVec3::Y),

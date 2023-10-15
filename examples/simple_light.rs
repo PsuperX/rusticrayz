@@ -3,24 +3,38 @@ use rand::Rng;
 use rusticrayz::{
     bvh::Bvh,
     camera::{Camera, CameraSettings},
+    hittable::Hittable,
     material::*,
-    shapes::Sphere,
+    shapes::{Quad, Sphere},
     texture::*,
 };
 use std::{io, sync::Arc};
 
 fn main() -> io::Result<()> {
-    let mut world = vec![];
+    let mut world: Vec<Box<dyn Hittable + Sync>> = vec![];
 
     let seed = rand::thread_rng().gen();
     let noise_tex = TurbulenceTexture::new(4., seed);
     let noise_material = Arc::new(Lambertian::new(noise_tex));
-    world.push(Sphere::new(
+    world.push(Box::new(Sphere::new(
         dvec3(0., -1000., 0.),
         1000.,
         noise_material.clone(),
-    ));
-    world.push(Sphere::new(dvec3(0., 2., 0.), 2., noise_material));
+    )));
+    world.push(Box::new(Sphere::new(dvec3(0., 2., 0.), 2., noise_material)));
+
+    let diff_light = Arc::new(DiffuseLight::from_color(dvec3(4.0, 4.0, 4.0)));
+    world.push(Box::new(Sphere::new(
+        dvec3(0., 7., 0.),
+        2.,
+        diff_light.clone(),
+    )));
+    world.push(Box::new(Quad::new(
+        dvec3(3.0, 1.0, -2.0),
+        dvec3(2.0, 0.0, 0.0),
+        dvec3(0.0, 2.0, 0.0),
+        diff_light,
+    )));
 
     let world = Bvh::new(world);
     let camera = Camera::new(CameraSettings {
@@ -28,9 +42,9 @@ fn main() -> io::Result<()> {
         aspect_ratio: 16. / 9.,
         samples_per_pixel: 100,
         max_depth: 50,
-        background: None,
-        look_from: Some(dvec3(13., 2., 3.)),
-        look_at: Some(DVec3::ZERO),
+        background: Some(dvec3(0.0, 0.0, 0.0)),
+        look_from: Some(dvec3(26., 2., 6.)),
+        look_at: Some(dvec3(0.0, 2.0, 0.0)),
         view_up: Some(DVec3::Y),
         vfov: Some(20.),
         defocus_angle: Some(0.0),

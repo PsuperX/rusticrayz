@@ -4,18 +4,17 @@ use rusticrayz::{
     camera::{Camera, CameraSettings},
     material::*,
     shapes::Quad,
-    texture::*,
 };
 use std::{io, sync::Arc};
 
 fn main() -> io::Result<()> {
     let mut world = vec![];
 
-    let left_red = Arc::new(Lambertian::new(SolidColor::from(dvec3(1.0, 0.2, 0.2))));
-    let back_green = Arc::new(Lambertian::new(SolidColor::from(dvec3(0.2, 1.0, 0.2))));
-    let right_blue = Arc::new(Lambertian::new(SolidColor::from(dvec3(0.2, 0.2, 1.0))));
-    let upper_orange = Arc::new(Lambertian::new(SolidColor::from(dvec3(1.0, 0.5, 0.0))));
-    let lower_teal = Arc::new(Lambertian::new(SolidColor::from(dvec3(0.2, 0.8, 0.8))));
+    let left_red = Arc::new(Lambertian::from_color(dvec3(1.0, 0.2, 0.2)));
+    let back_green = Arc::new(Lambertian::from_color(dvec3(0.2, 1.0, 0.2)));
+    let right_blue = Arc::new(Lambertian::from_color(dvec3(0.2, 0.2, 1.0)));
+    let upper_orange = Arc::new(Lambertian::from_color(dvec3(1.0, 0.5, 0.0)));
+    let lower_teal = Arc::new(Lambertian::from_color(dvec3(0.2, 0.8, 0.8)));
 
     world.push(Quad::new(
         dvec3(-3.0, -2.0, 5.0),
@@ -54,6 +53,7 @@ fn main() -> io::Result<()> {
         aspect_ratio: 1.,
         samples_per_pixel: 100,
         max_depth: 50,
+        background: None,
         look_from: Some(dvec3(0., 0., 9.)),
         look_at: Some(DVec3::ZERO),
         view_up: Some(DVec3::Y),

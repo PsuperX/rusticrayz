@@ -15,20 +15,27 @@ impl Ray {
         self.orig + self.dir * t
     }
 
-    pub fn color(&self, depth: u32, world: &impl Hittable) -> Color {
+    pub fn color(&self, depth: u32, world: &impl Hittable, background: &Option<Color>) -> Color {
         if depth == 0 {
             return Color::ZERO;
         }
 
         if let Some(hit) = world.hit(self, &(0.001..f64::INFINITY)) {
+            let color_from_emission = hit.material.emitted(hit.u, hit.v, hit.point);
+
             if let Some(scatter) = hit.material.scatter(self, &hit) {
-                return scatter.attenuation * scatter.ray.color(depth - 1, world);
+                let color_from_scatter =
+                    scatter.attenuation * scatter.ray.color(depth - 1, world, background);
+                return color_from_emission + color_from_scatter;
+            } else {
+                return color_from_emission;
             }
-            return Color::ZERO;
         }
 
-        let unit_dir = self.dir.normalize();
-        let a = 0.5 * (unit_dir.y + 1.);
-        Color::lerp(Color::ONE, Color::new(0.5, 0.7, 1.), a)
+        background.unwrap_or_else(|| {
+            let unit_dir = self.dir.normalize();
+            let a = 0.5 * (unit_dir.y + 1.);
+            Color::lerp(Color::ONE, Color::new(0.5, 0.7, 1.), a)
+        })
     }
 }
