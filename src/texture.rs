@@ -1,6 +1,7 @@
 use crate::color::Color;
 use glam::{dvec3, DVec3};
 use image::{DynamicImage, GenericImageView};
+use noise::{NoiseFn, Perlin};
 use std::path::Path;
 
 pub trait Texture {
@@ -14,6 +15,12 @@ pub struct SolidColor {
 impl Texture for SolidColor {
     fn color(&self, _u: f64, _v: f64, _point: DVec3) -> Color {
         self.color
+    }
+}
+
+impl From<Color> for SolidColor {
+    fn from(value: Color) -> Self {
+        Self { color: value }
     }
 }
 
@@ -92,8 +99,22 @@ impl Texture for ImageTexture {
     }
 }
 
-impl From<Color> for SolidColor {
-    fn from(value: Color) -> Self {
-        Self { color: value }
+pub struct NoiseTexture {
+    noise: noise::Perlin,
+    scale: f64,
+}
+
+impl NoiseTexture {
+    pub fn new(scale: f64, seed: u32) -> Self {
+        Self {
+            noise: Perlin::new(seed),
+            scale,
+        }
+    }
+}
+
+impl Texture for NoiseTexture {
+    fn color(&self, _u: f64, _v: f64, point: DVec3) -> Color {
+        (1.0 + self.noise.get((self.scale * point).into())) * 0.5 * DVec3::ONE
     }
 }
