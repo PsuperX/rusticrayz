@@ -1,5 +1,6 @@
 use crate::{aabb::AABB, material::Material, ray::Ray};
-use glam::DVec3;
+use glam::{dvec3, DVec3};
+use itertools::Itertools;
 use std::ops::Range;
 
 pub trait Hittable {
@@ -98,6 +99,122 @@ impl<T: Hittable> Hittable for HittableList<T> {
         });
 
         hit
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        &self.bbox
+    }
+}
+
+pub struct Translate<T>
+where
+    T: Hittable,
+{
+    object: T,
+    offset: DVec3,
+    bbox: AABB,
+}
+
+impl<T: Hittable> Translate<T> {
+    pub fn new(object: T, displacement: DVec3) -> Self {
+        Self {
+            bbox: object.bounding_box().offset(displacement),
+            object,
+            offset: displacement,
+        }
+    }
+}
+
+impl<T: Hittable> Hittable for Translate<T> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        let offset_ray = Ray::new(ray.orig - self.offset, ray.dir);
+
+        self.object.hit(&offset_ray, interval).map(|mut hit| {
+            hit.point += self.offset;
+            hit
+        })
+    }
+
+    fn bounding_box(&self) -> &AABB {
+        &self.bbox
+    }
+}
+
+pub struct RotateY<T>
+where
+    T: Hittable,
+{
+    object: T,
+    sin_theta: f64,
+    cos_theta: f64,
+    bbox: AABB,
+}
+
+impl<T> RotateY<T>
+where
+    T: Hittable,
+{
+    pub fn new(object: T, angle: f64) -> Self {
+        let radians = angle.to_radians();
+        let sin_theta = radians.sin();
+        let cos_theta = radians.cos();
+        let bbox = object.bounding_box();
+
+        let (min, max) = (0..2)
+            .cartesian_product(0..2)
+            .cartesian_product(0..2)
+            .map(|((i, j), k)| {
+                let new_point = dvec3(i as f64, j as f64, k as f64) * bbox.max
+                    + dvec3((1 - i) as f64, (1 - j) as f64, (1 - k) as f64) * bbox.min;
+
+                let newx = cos_theta * new_point.x + sin_theta * new_point.z;
+                let newz = -sin_theta * new_point.x + cos_theta * new_point.z;
+
+                dvec3(newx, new_point.y, newz)
+            })
+            .fold(
+                (DVec3::INFINITY, DVec3::NEG_INFINITY),
+                |(min, max), tester| (min.min(tester), max.max(tester)),
+            );
+
+        Self {
+            object,
+            sin_theta,
+            cos_theta,
+            bbox: AABB::new(min, max),
+        }
+    }
+}
+
+impl<T: Hittable> Hittable for RotateY<T> {
+    fn hit(&self, ray: &Ray, interval: &Range<f64>) -> Option<HitRecord> {
+        let mut origin = ray.orig;
+        let mut dir = ray.dir;
+
+        origin[0] = self.cos_theta * ray.orig[0] - self.sin_theta * ray.orig[2];
+        origin[2] = self.sin_theta * ray.orig[0] + self.cos_theta * ray.orig[2];
+
+        dir[0] = self.cos_theta * ray.dir[0] - self.sin_theta * ray.dir[2];
+        dir[2] = self.sin_theta * ray.dir[0] + self.cos_theta * ray.dir[2];
+
+        let rotated_r = Ray::new(origin, dir);
+
+        // Determine where (if any) an intersection occurs in object space
+        self.object.hit(&rotated_r, interval).map(|mut hit| {
+            // Change the intersection point from object space to world space
+            let mut p = hit.point;
+            p[0] = self.cos_theta * hit.point[0] + self.sin_theta * hit.point[2];
+            p[2] = -self.sin_theta * hit.point[0] + self.cos_theta * hit.point[2];
+
+            // Change the normal from object space to world space
+            let mut normal = hit.normal;
+            normal[0] = self.cos_theta * hit.normal[0] + self.sin_theta * hit.normal[2];
+            normal[2] = -self.sin_theta * hit.normal[0] + self.cos_theta * hit.normal[2];
+
+            hit.point = p;
+            hit.normal = normal;
+            hit
+        })
     }
 
     fn bounding_box(&self) -> &AABB {

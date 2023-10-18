@@ -104,6 +104,10 @@ impl AABB {
             2
         }
     }
+
+    pub fn offset(&self, displacement: DVec3) -> AABB {
+        Self::new(self.min + displacement, self.max + displacement)
+    }
 }
 
 impl Default for AABB {
