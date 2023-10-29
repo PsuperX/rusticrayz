@@ -134,43 +134,43 @@ impl Application {
     fn render(&mut self) {
         match self.wgpu_ctx.surface.get_current_texture() {
             Ok(frame) => {
-                // let mut encoder = self
-                //     .wgpu_ctx
-                //     .device
-                //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                //
-                // let egui_raw_input = self.egui_state.take_egui_input(&self.window);
-                // let egui_full_output = self.egui_ctx.run(egui_raw_input, |egui_ctx| {
-                //     for layer in self.layers.iter_mut() {
-                //         layer.on_ui_render(egui_ctx);
-                //     }
-                // });
-                // self.egui_state.handle_platform_output(
-                //     &self.window,
-                //     &self.egui_ctx,
-                //     egui_full_output.platform_output,
-                // );
-                // let egui_primitives = self.egui_ctx.tessellate(egui_full_output.shapes);
-                // let size = self.window.inner_size();
-                // let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
-                //     size_in_pixels: [size.width, size.height],
-                //     pixels_per_point: self.egui_state.pixels_per_point(),
-                // };
-                // for (id, image_delta) in egui_full_output.textures_delta.set {
-                //     self.egui_renderer.update_texture(
-                //         &self.wgpu_ctx.device,
-                //         &self.wgpu_ctx.queue,
-                //         id,
-                //         &image_delta,
-                //     );
-                // }
-                // self.egui_renderer.update_buffers(
-                //     &self.wgpu_ctx.device,
-                //     &self.wgpu_ctx.queue,
-                //     &mut encoder,
-                //     &egui_primitives,
-                //     &screen_descriptor,
-                // );
+                let mut encoder = self
+                    .wgpu_ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                let egui_raw_input = self.egui_state.take_egui_input(&self.window);
+                let egui_full_output = self.egui_ctx.run(egui_raw_input, |egui_ctx| {
+                    for layer in self.layers.iter_mut() {
+                        layer.on_ui_render(egui_ctx);
+                    }
+                });
+                self.egui_state.handle_platform_output(
+                    &self.window,
+                    &self.egui_ctx,
+                    egui_full_output.platform_output,
+                );
+                let egui_primitives = self.egui_ctx.tessellate(egui_full_output.shapes);
+                let size = self.window.inner_size();
+                let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
+                    size_in_pixels: [size.width, size.height],
+                    pixels_per_point: self.egui_state.pixels_per_point(),
+                };
+                for (id, image_delta) in egui_full_output.textures_delta.set {
+                    self.egui_renderer.update_texture(
+                        &self.wgpu_ctx.device,
+                        &self.wgpu_ctx.queue,
+                        id,
+                        &image_delta,
+                    );
+                }
+                self.egui_renderer.update_buffers(
+                    &self.wgpu_ctx.device,
+                    &self.wgpu_ctx.queue,
+                    &mut encoder,
+                    &egui_primitives,
+                    &screen_descriptor,
+                );
 
                 let view = frame
                     .texture
@@ -182,39 +182,39 @@ impl Application {
                     commands.push(layer.on_draw_frame(&self.wgpu_ctx, &view));
                 }
 
-                // {
-                //     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                //         label: Some("Render Pass"),
-                //         // where to draw to
-                //         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                //             view: &view,
-                //             resolve_target: None,
-                //             ops: wgpu::Operations {
-                //                 load: wgpu::LoadOp::Load,
-                //                 store: true,
-                //             },
-                //         })],
-                //         depth_stencil_attachment: None, // TODO: do i need this?
-                //     });
-                //
-                //     // Draw egui
-                //     render_pass.push_debug_group("egui");
-                //     self.egui_renderer.render(
-                //         &mut render_pass,
-                //         &egui_primitives,
-                //         &screen_descriptor,
-                //     );
-                // }
-                // commands.push(encoder.finish());
+                {
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Render Pass"),
+                        // where to draw to
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            },
+                        })],
+                        depth_stencil_attachment: None, // TODO: do i need this?
+                    });
+
+                    // Draw egui
+                    render_pass.push_debug_group("egui");
+                    self.egui_renderer.render(
+                        &mut render_pass,
+                        &egui_primitives,
+                        &screen_descriptor,
+                    );
+                }
+                commands.push(encoder.finish());
 
                 // Then we submit the work
                 self.wgpu_ctx.queue.submit(commands);
                 frame.present();
 
                 // Free unused textures
-                // for id in egui_full_output.textures_delta.free {
-                //     self.egui_renderer.free_texture(&id);
-                // }
+                for id in egui_full_output.textures_delta.free {
+                    self.egui_renderer.free_texture(&id);
+                }
 
                 // TODO: Update the mouse cursor
             }

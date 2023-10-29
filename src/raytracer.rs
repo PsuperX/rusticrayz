@@ -35,12 +35,19 @@ impl Raytracer {
 
 impl Layer for Raytracer {
     fn on_ui_render(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Hello world!");
-            if ui.button("Click me").clicked() {
-                info!("Click! :D");
-            }
-        });
+        let frame = egui::containers::Frame {
+            fill: egui::Color32::TRANSPARENT,
+            stroke: egui::Stroke::new(2.0, egui::Color32::WHITE),
+            ..Default::default()
+        };
+        egui::TopBottomPanel::top("my panel")
+            .frame(frame)
+            .show(ctx, |ui| {
+                ui.label(egui::RichText::new("Hello world!").color(egui::Color32::WHITE));
+                if ui.button("Click me").clicked() {
+                    info!("Click! :D");
+                }
+            });
 
         egui::Window::new("My Window").show(ctx, |ui| {
             ui.label(":D");
