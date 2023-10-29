@@ -4,5 +4,7 @@
 use link_dynamic;
 
 mod app;
+mod layer;
+mod raytracer;
 
 pub use app::Application;
