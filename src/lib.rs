@@ -8,5 +8,6 @@ mod camera;
 mod layer;
 mod raytracer;
 mod scene;
+mod triangle;
 
 pub use app::Application;

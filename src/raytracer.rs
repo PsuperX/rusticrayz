@@ -1,19 +1,16 @@
-use crate::{
-    app::WgpuCtx,
-    camera::{Camera, CameraUniform},
-    layer::Layer,
-    scene::Scene,
-};
+use crate::{app::WgpuCtx, camera::CameraUniform, layer::Layer, scene::Scene, triangle::Triangle};
 use std::{borrow::Cow, mem};
 use tracing::info;
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const MAX_TRIANGLE_COUNT: u64 = 32;
 
 pub struct Raytracer {
     // Assets
-    color_buffer: wgpu::Texture,
-    sampler: wgpu::Sampler,
     scene_data_buffer: wgpu::Buffer,
+    objects_buffer: wgpu::Buffer,
+
+    max_bounces: i32,
 
     // Pipeline stuff
     rt_pipeline: wgpu::ComputePipeline,
@@ -23,15 +20,20 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    pub fn new(ctx: &mut WgpuCtx) -> Self {
-        let (color_buffer, sampler, scene_data_buffer) = create_assets(ctx);
-        let (rt_pipeline, rt_bind_group, screen_pipeline, screen_bind_group) =
-            create_pipeline(ctx, &color_buffer, &sampler, &scene_data_buffer);
+    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32) -> Self {
+        let (color_buffer, sampler, scene_data_buffer, objects_buffer) = create_assets(ctx);
+        let (rt_pipeline, rt_bind_group, screen_pipeline, screen_bind_group) = create_pipeline(
+            ctx,
+            &color_buffer,
+            &sampler,
+            &scene_data_buffer,
+            &objects_buffer,
+        );
 
         Self {
-            color_buffer,
-            sampler,
             scene_data_buffer,
+            objects_buffer,
+            max_bounces,
             rt_pipeline,
             rt_bind_group,
             screen_pipeline,
@@ -67,16 +69,21 @@ impl Layer for Raytracer {
         view: &wgpu::TextureView,
         scene: &Scene,
     ) -> wgpu::CommandBuffer {
+        let primitives = scene.get_primitives();
         let scene_data = SceneData {
             camera: scene.get_camera().get_uniform(),
-            padding: [0; 4],
+            max_bounces: self.max_bounces,
+            primitive_count: primitives.len() as i32,
+            padding: Default::default(),
         };
-
         ctx.queue.write_buffer(
             &self.scene_data_buffer,
             0,
             bytemuck::cast_slice(&[scene_data]),
         );
+
+        ctx.queue
+            .write_buffer(&self.objects_buffer, 0, bytemuck::cast_slice(primitives));
 
         let mut encoder = ctx
             .device
@@ -117,9 +124,9 @@ impl Layer for Raytracer {
     }
 }
 
-fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buffer) {
+fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buffer, wgpu::Buffer) {
     let color_buffer = ctx.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Raytracer compute out"),
+        label: Some("Raytracer color buffer"),
         size: wgpu::Extent3d {
             width: ctx.viewport.width,
             height: ctx.viewport.height,
@@ -151,7 +158,14 @@ fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buff
         mapped_at_creation: false,
     });
 
-    (color_buffer, sampler, scene_data_buffer)
+    let objects_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Objects data buffer"),
+        size: MAX_TRIANGLE_COUNT * mem::size_of::<Triangle>() as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    (color_buffer, sampler, scene_data_buffer, objects_buffer)
 }
 
 fn create_pipeline(
@@ -159,6 +173,7 @@ fn create_pipeline(
     color_buffer: &wgpu::Texture,
     sampler: &wgpu::Sampler,
     scene_data_buffer: &wgpu::Buffer,
+    objects_buffer: &wgpu::Buffer,
 ) -> (
     wgpu::ComputePipeline,
     wgpu::BindGroup,
@@ -192,6 +207,17 @@ fn create_pipeline(
                         },
                         count: None,
                     },
+                    // Objects Data
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
     let color_buffer_view = color_buffer.create_view(&wgpu::TextureViewDescriptor::default());
@@ -206,6 +232,10 @@ fn create_pipeline(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: scene_data_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: objects_buffer.as_entire_binding(),
             },
         ],
     });
@@ -335,5 +365,7 @@ fn create_pipeline(
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct SceneData {
     camera: CameraUniform,
-    padding: [i32; 4],
+    max_bounces: i32,
+    primitive_count: i32,
+    padding: [i32; 2],
 }

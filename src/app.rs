@@ -1,4 +1,4 @@
-use crate::{camera::Camera, layer::Layer, raytracer::Raytracer, scene::Scene};
+use crate::{camera::Camera, layer::Layer, raytracer::Raytracer, scene::Scene, triangle::Triangle};
 use glam::vec3;
 use winit::{
     event::{Event, WindowEvent},
@@ -50,7 +50,15 @@ impl Application {
         );
 
         let camera = Camera::new(vec3(0.0, 0.0, 0.0));
-        let scene = Scene::new(camera);
+        let triangles = vec![Triangle::new(
+            [
+                vec3(-0.25, 0.25, 1.0),
+                vec3(0.25, 0.25, 1.0),
+                vec3(0.0, -0.25, 1.0),
+            ],
+            vec3(1.0, 0.0, 0.0),
+        )];
+        let scene = Scene::wih_primitives(triangles, camera);
 
         Self {
             window,
@@ -70,7 +78,7 @@ impl Application {
         self.is_running = true;
 
         // TODO: find a better place for this
-        let raytracer = Raytracer::new(&mut self.wgpu_ctx);
+        let raytracer = Raytracer::new(&mut self.wgpu_ctx, 50);
         self.push_layer(Box::new(raytracer));
 
         use winit::platform::run_return::EventLoopExtRunReturn;
