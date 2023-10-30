@@ -1,4 +1,5 @@
 use crate::{app::WgpuCtx, camera::CameraUniform, layer::Layer, scene::Scene, triangle::Triangle};
+use glam::{vec2, vec3, Vec2, Vec3};
 use std::{borrow::Cow, mem};
 use tracing::info;
 
@@ -70,12 +71,19 @@ impl Layer for Raytracer {
         scene: &Scene,
     ) -> wgpu::CommandBuffer {
         let primitives = scene.get_primitives();
-        let scene_data = SceneData {
-            camera: scene.get_camera().get_uniform(),
-            max_bounces: self.max_bounces,
-            primitive_count: primitives.len() as i32,
-            padding: Default::default(),
-        };
+        let camera = scene.get_camera();
+        let (pixel00_loc, pixel_delta_u, pixel_delta_v) = viewport_vectors(
+            vec2(ctx.viewport.width as f32, ctx.viewport.height as f32),
+            camera.pos,
+        );
+        let scene_data = SceneData::new(
+            camera.get_uniform(),
+            self.max_bounces,
+            primitives.len() as i32,
+            pixel00_loc,
+            pixel_delta_u,
+            pixel_delta_v,
+        );
         ctx.queue.write_buffer(
             &self.scene_data_buffer,
             0,
@@ -361,11 +369,64 @@ fn create_pipeline(
     )
 }
 
+fn viewport_vectors(screen_size: Vec2, camera_pos: Vec3) -> (Vec3, Vec3, Vec3) {
+    let focal_length = 1.0;
+    let viewport_height = 2.0;
+    let viewport_width = viewport_height * (screen_size.x / screen_size.y);
+    let camera_center = camera_pos;
+
+    // Calculate the vectors across the horizontal and down the vertical viewport edges.
+    let viewport_u = vec3(viewport_width, 0.0, 0.0);
+    let viewport_v = vec3(0.0, -viewport_height, 0.0);
+
+    // Calculate the horizontal and vertical delta vectors from pixel to pixel.
+    let pixel_delta_u = viewport_u / screen_size.x;
+    let pixel_delta_v = viewport_v / screen_size.y;
+
+    // Calculate the location of the upper left pixel.
+    let viewport_upper_left =
+        camera_center - vec3(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
+    let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+    (pixel00_loc, pixel_delta_u, pixel_delta_v)
+}
+
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct SceneData {
     camera: CameraUniform,
+    pixel00_loc: Vec3,
+    _padding0: u32,
+    pixel_delta_u: Vec3,
+    _padding1: u32,
+    pixel_delta_v: Vec3,
+    _padding2: u32,
+
     max_bounces: i32,
     primitive_count: i32,
-    padding: [i32; 2],
+    _padding3: [u32; 2],
+}
+
+impl SceneData {
+    fn new(
+        camera: CameraUniform,
+        max_bounces: i32,
+        primitive_count: i32,
+        pixel00_loc: Vec3,
+        pixel_delta_u: Vec3,
+        pixel_delta_v: Vec3,
+    ) -> Self {
+        Self {
+            camera,
+            pixel00_loc,
+            pixel_delta_u,
+            pixel_delta_v,
+            max_bounces,
+            primitive_count,
+            _padding0: Default::default(),
+            _padding1: Default::default(),
+            _padding2: Default::default(),
+            _padding3: Default::default(),
+        }
+    }
 }

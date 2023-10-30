@@ -15,10 +15,15 @@ struct Ray {
 }
 
 struct SceneData {
-    cameraPos: vec3<f32>,
-    cameraForwards: vec3<f32>,
-    cameraRight: vec3<f32>,
-    cameraUp: vec3<f32>,
+    camera_pos: vec3<f32>,
+    camera_forwards: vec3<f32>,
+    camera_right: vec3<f32>,
+    camera_up: vec3<f32>,
+
+    pixel00_loc: vec3<f32>,
+    pixel_delta_u: vec3<f32>,
+    pixel_delta_v: vec3<f32>,
+
     maxBounces: i32,
     primitiveCount: i32,
 }
@@ -44,31 +49,12 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
         return;
     }
 
-    // TODO: This probably should happen outside the shader
-    let focal_length: f32 = 1.0;
-    let viewport_height: f32 = 2.0;
-    let viewport_width: f32 = viewport_height * (f32(screen_size.x) / f32(screen_size.y));
-    let camera_center: vec3<f32> = scene.cameraPos;
-
-    // Calculate the vectors across the horizontal and down the vertical viewport edges.
-    let viewport_u: vec3<f32> = vec3<f32>(viewport_width, 0.0, 0.0);
-    let viewport_v: vec3<f32> = vec3<f32>(0.0, -viewport_height, 0.0);
-
-    // Calculate the horizontal and vertical delta vectors from pixel to pixel.
-    let pixel_delta_u: vec3<f32> = viewport_u / f32(screen_size.x);
-    let pixel_delta_v: vec3<f32> = viewport_v / f32(screen_size.y);
-
-    // Calculate the location of the upper left pixel.
-    let viewport_upper_left: vec3<f32> = camera_center - vec3<f32>(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
-    let pixel00_loc: vec3<f32> = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
-
-
-    let pixel_center: vec3<f32> = pixel00_loc + (f32(screen_pos.x) * pixel_delta_u) + (f32(screen_pos.y) * pixel_delta_v);
-    let ray_direction: vec3<f32> = pixel_center - camera_center;
+    let pixel_center: vec3<f32> = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
+    let ray_direction: vec3<f32> = pixel_center - scene.camera_pos;
 
     var ray: Ray;
     ray.dir = ray_direction;
-    ray.orig = camera_center;
+    ray.orig = scene.camera_pos;
 
     let pixel_color: vec3<f32> = rayColor(ray);
 
@@ -78,22 +64,22 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
 fn rayColor(ray: Ray) -> vec3<f32> {
     var color: vec3<f32> = vec3(0.0, 0.0, 0.0);
 
-    var nearestHit: f32 = 9999.0;
-    var hitSomething: bool = false;
+    var nearest_hit: f32 = 9999.0;
+    var hit_something: bool = false;
 
     var hit: HitRecord;
 
     for (var i: i32 = 0; i < scene.primitiveCount; i++) {
-        var newRenderState: HitRecord = triangleIntersect(ray, objects.triangles[i], 0.001, nearestHit, hit);
+        var new_render_state: HitRecord = triangleIntersect(ray, objects.triangles[i], 0.001, nearest_hit, hit);
 
-        if newRenderState.hit {
-            nearestHit = newRenderState.t;
-            hit = newRenderState;
-            hitSomething = true;
+        if new_render_state.hit {
+            nearest_hit = new_render_state.t;
+            hit = new_render_state;
+            hit_something = true;
         }
     }
 
-    if hitSomething {
+    if hit_something {
         return hit.color;
         // return hit.position;
     }
@@ -104,7 +90,7 @@ fn rayColor(ray: Ray) -> vec3<f32> {
     return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 }
 
-fn triangleIntersect(ray: Ray, triangle: Triangle, tMin: f32, tMax: f32, oldHit: HitRecord) -> HitRecord {
+fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHit: HitRecord) -> HitRecord {
     // Set up a blank hitRecord,
     // right now this hasn't hit anything
     var result: HitRecord;
@@ -118,7 +104,7 @@ fn triangleIntersect(ray: Ray, triangle: Triangle, tMin: f32, tMax: f32, oldHit:
     var t: f32 = -(dot(N, ray.orig) + d) / dot(N, ray.dir);
 
     // Check if the intersection point is in range
-    if t < tMin && t > tMax {
+    if t < t_min && t > t_max {
         return result;
     }
 
