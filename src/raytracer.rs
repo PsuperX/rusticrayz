@@ -1,5 +1,10 @@
-use crate::{app::WgpuCtx, layer::Layer};
-use std::borrow::Cow;
+use crate::{
+    app::WgpuCtx,
+    camera::{Camera, CameraUniform},
+    layer::Layer,
+    scene::Scene,
+};
+use std::{borrow::Cow, mem};
 use tracing::info;
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -8,6 +13,7 @@ pub struct Raytracer {
     // Assets
     color_buffer: wgpu::Texture,
     sampler: wgpu::Sampler,
+    scene_data_buffer: wgpu::Buffer,
 
     // Pipeline stuff
     rt_pipeline: wgpu::ComputePipeline,
@@ -18,13 +24,14 @@ pub struct Raytracer {
 
 impl Raytracer {
     pub fn new(ctx: &mut WgpuCtx) -> Self {
-        let (color_buffer, sampler) = create_assets(ctx);
+        let (color_buffer, sampler, scene_data_buffer) = create_assets(ctx);
         let (rt_pipeline, rt_bind_group, screen_pipeline, screen_bind_group) =
-            create_pipeline(ctx, &color_buffer, &sampler);
+            create_pipeline(ctx, &color_buffer, &sampler, &scene_data_buffer);
 
         Self {
             color_buffer,
             sampler,
+            scene_data_buffer,
             rt_pipeline,
             rt_bind_group,
             screen_pipeline,
@@ -54,7 +61,23 @@ impl Layer for Raytracer {
         });
     }
 
-    fn on_draw_frame(&mut self, ctx: &WgpuCtx, view: &wgpu::TextureView) -> wgpu::CommandBuffer {
+    fn on_draw_frame(
+        &mut self,
+        ctx: &WgpuCtx,
+        view: &wgpu::TextureView,
+        scene: &Scene,
+    ) -> wgpu::CommandBuffer {
+        let scene_data = SceneData {
+            camera: scene.get_camera().get_uniform(),
+            padding: [0; 4],
+        };
+
+        ctx.queue.write_buffer(
+            &self.scene_data_buffer,
+            0,
+            bytemuck::cast_slice(&[scene_data]),
+        );
+
         let mut encoder = ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -94,7 +117,7 @@ impl Layer for Raytracer {
     }
 }
 
-fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler) {
+fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buffer) {
     let color_buffer = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Raytracer compute out"),
         size: wgpu::Extent3d {
@@ -120,13 +143,22 @@ fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler) {
         mipmap_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     });
-    (color_buffer, sampler)
+
+    let scene_data_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Scene data buffer"),
+        size: mem::size_of::<SceneData>() as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    (color_buffer, sampler, scene_data_buffer)
 }
 
 fn create_pipeline(
     ctx: &mut WgpuCtx,
     color_buffer: &wgpu::Texture,
     sampler: &wgpu::Sampler,
+    scene_data_buffer: &wgpu::Buffer,
 ) -> (
     wgpu::ComputePipeline,
     wgpu::BindGroup,
@@ -149,16 +181,33 @@ fn create_pipeline(
                         },
                         count: None,
                     },
+                    // Scene Data
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
     let color_buffer_view = color_buffer.create_view(&wgpu::TextureViewDescriptor::default());
     let rt_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("Raytracer bind group"),
         layout: &rt_bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: wgpu::BindingResource::TextureView(&color_buffer_view),
-        }],
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&color_buffer_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: scene_data_buffer.as_entire_binding(),
+            },
+        ],
     });
 
     let rt_pipeline_layout = ctx
@@ -173,7 +222,7 @@ fn create_pipeline(
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Raytracer compute shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("compute.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/raytracer.wgsl"))),
         });
 
     let rt_pipeline = ctx
@@ -235,7 +284,7 @@ fn create_pipeline(
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Raytracer screen shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("screen.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/screen.wgsl"))),
         });
 
     let screen_pipeline = ctx
@@ -280,4 +329,11 @@ fn create_pipeline(
         screen_pipeline,
         screen_bind_group,
     )
+}
+
+#[repr(C, align(16))]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct SceneData {
+    camera: CameraUniform,
+    padding: [i32; 4],
 }

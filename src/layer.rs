@@ -1,4 +1,4 @@
-use crate::app::WgpuCtx;
+use crate::{app::WgpuCtx, scene::Scene};
 
 pub trait Layer {
     fn on_attach(&mut self, ctx: &mut WgpuCtx) {}
@@ -6,5 +6,10 @@ pub trait Layer {
 
     fn on_ui_render(&mut self, _ctx: &egui::Context) {}
 
-    fn on_draw_frame(&mut self, ctx: &WgpuCtx, view: &wgpu::TextureView) -> wgpu::CommandBuffer;
+    fn on_draw_frame(
+        &mut self,
+        ctx: &WgpuCtx,
+        view: &wgpu::TextureView,
+        scene: &Scene,
+    ) -> wgpu::CommandBuffer;
 }

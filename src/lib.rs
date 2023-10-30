@@ -4,7 +4,9 @@
 use link_dynamic;
 
 mod app;
+mod camera;
 mod layer;
 mod raytracer;
+mod scene;
 
 pub use app::Application;

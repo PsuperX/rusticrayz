@@ -1,5 +1,5 @@
-use crate::{layer::Layer, raytracer::Raytracer};
-use tracing::info;
+use crate::{camera::Camera, layer::Layer, raytracer::Raytracer, scene::Scene};
+use glam::vec3;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -18,6 +18,8 @@ pub struct Application {
     egui_renderer: egui_wgpu::Renderer,
 
     layers: Vec<Box<dyn Layer>>,
+
+    scene: Scene,
 
     is_running: bool,
     needs_resize: bool,
@@ -47,6 +49,9 @@ impl Application {
             MSAA_SAMPLES,
         );
 
+        let camera = Camera::new(vec3(0.0, 0.0, 0.0));
+        let scene = Scene::new(camera);
+
         Self {
             window,
             event_loop: Some(event_loop),
@@ -55,6 +60,7 @@ impl Application {
             egui_ctx,
             egui_renderer,
             layers: vec![],
+            scene,
             is_running: false,
             needs_resize: false,
         }
@@ -179,7 +185,7 @@ impl Application {
                 let mut commands = vec![];
                 // Draw my stuff
                 for layer in self.layers.iter_mut() {
-                    commands.push(layer.on_draw_frame(&self.wgpu_ctx, &view));
+                    commands.push(layer.on_draw_frame(&self.wgpu_ctx, &view, &self.scene));
                 }
 
                 {
