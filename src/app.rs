@@ -1,5 +1,7 @@
 use crate::{camera::Camera, layer::Layer, raytracer::Raytracer, scene::Scene, triangle::Triangle};
 use glam::vec3;
+use std::time::Duration;
+use tracing::debug;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -7,6 +9,9 @@ use winit::{
 };
 
 const MSAA_SAMPLES: u32 = 1;
+const EGUI_MIN_REDRAW_TIME: f32 = 1.0 / 60.0;
+const RENDER_SCALE: f32 = 1.0;
+const MAX_BOUNCES: i32 = 50;
 
 pub struct Application {
     window: Window,
@@ -78,31 +83,35 @@ impl Application {
         self.is_running = true;
 
         // TODO: find a better place for this
-        let raytracer = Raytracer::new(&mut self.wgpu_ctx, 50);
+        let raytracer = Raytracer::new(&mut self.wgpu_ctx, MAX_BOUNCES, RENDER_SCALE);
         self.push_layer(Box::new(raytracer));
 
         use winit::platform::run_return::EventLoopExtRunReturn;
         self.event_loop
             .take()
             .unwrap()
-            .run_return(move |event, _, control_flow| {
-                // You should change this if you want to render continuosly
-                *control_flow = ControlFlow::Wait;
-
-                match event {
-                    Event::WindowEvent { event, .. } => {
-                        self.handle_window_event(event, control_flow)
-                    }
-                    Event::RedrawRequested(_) => {
-                        if self.needs_resize {
-                            self.wgpu_ctx.handle_resize(&self.window.inner_size());
-                            self.needs_resize = false;
-                        }
-
-                        self.render();
-                    }
-                    _ => {}
+            .run_return(move |event, _, control_flow| match event {
+                Event::NewEvents(winit::event::StartCause::ResumeTimeReached { .. }) => {
+                    self.window.request_redraw();
                 }
+                Event::WindowEvent { event, .. } => {
+                    self.handle_window_event(event, control_flow);
+                }
+                Event::RedrawRequested(_) => {
+                    if self.needs_resize {
+                        self.wgpu_ctx.handle_resize(&self.window.inner_size());
+                        for layer in self.layers.iter_mut() {
+                            layer.on_resize(&mut self.wgpu_ctx);
+                        }
+                        self.needs_resize = false;
+                    }
+
+                    let repaint_after = self
+                        .render()
+                        .max(Duration::from_secs_f32(EGUI_MIN_REDRAW_TIME));
+                    control_flow.set_wait_timeout(repaint_after);
+                }
+                _ => {}
             });
     }
 
@@ -118,6 +127,8 @@ impl Application {
     }
 
     fn handle_window_event(&mut self, event: WindowEvent, control_flow: &mut ControlFlow) {
+        debug!("WindowEvent: {event:?}");
+
         // Map window event to egui event
         let response = self.egui_state.on_event(&self.egui_ctx, &event);
         if response.repaint {
@@ -128,15 +139,13 @@ impl Application {
         }
 
         match event {
-            // TODO:
-            // WindowEvent::CursorMoved { position, .. } => {
-            //     cursor_position = Some(position);
-            // }
-            // WindowEvent::ModifiersChanged(new_modifiers) => {
-            //     modifiers = new_modifiers;
-            // }
             WindowEvent::Resized(_) => {
                 self.needs_resize = true;
+                self.window.request_redraw();
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                self.needs_resize = true;
+                self.window.request_redraw();
             }
             WindowEvent::CloseRequested => {
                 *control_flow = ControlFlow::Exit;
@@ -145,20 +154,16 @@ impl Application {
         }
     }
 
-    fn render(&mut self) {
+    fn render(&mut self) -> Duration {
         match self.wgpu_ctx.surface.get_current_texture() {
             Ok(frame) => {
-                let mut encoder = self
-                    .wgpu_ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
                 let egui_raw_input = self.egui_state.take_egui_input(&self.window);
                 let egui_full_output = self.egui_ctx.run(egui_raw_input, |egui_ctx| {
                     for layer in self.layers.iter_mut() {
                         layer.on_ui_render(egui_ctx);
                     }
                 });
+
                 self.egui_state.handle_platform_output(
                     &self.window,
                     &self.egui_ctx,
@@ -178,6 +183,11 @@ impl Application {
                         &image_delta,
                     );
                 }
+
+                let mut encoder = self
+                    .wgpu_ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
                 self.egui_renderer.update_buffers(
                     &self.wgpu_ctx.device,
                     &self.wgpu_ctx.queue,
@@ -230,7 +240,7 @@ impl Application {
                     self.egui_renderer.free_texture(&id);
                 }
 
-                // TODO: Update the mouse cursor
+                egui_full_output.repaint_after
             }
             Err(error) => match error {
                 wgpu::SurfaceError::OutOfMemory => {
@@ -242,6 +252,7 @@ impl Application {
                 _ => {
                     // Try rendering again next frame.
                     self.window.request_redraw();
+                    Duration::ZERO
                 }
             },
         }

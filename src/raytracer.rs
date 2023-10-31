@@ -1,4 +1,5 @@
 use crate::{app::WgpuCtx, camera::CameraUniform, layer::Layer, scene::Scene, triangle::Triangle};
+use egui::{containers::Frame, Margin};
 use glam::{vec2, vec3, Vec2, Vec3};
 use std::{borrow::Cow, mem};
 use tracing::info;
@@ -12,18 +13,30 @@ pub struct Raytracer {
     objects_buffer: wgpu::Buffer,
 
     max_bounces: i32,
+    render_scale: f32,
 
     // Pipeline stuff
+    rt_bind_group_layout: wgpu::BindGroupLayout,
     rt_pipeline: wgpu::ComputePipeline,
     rt_bind_group: wgpu::BindGroup,
+    screen_bind_group_layout: wgpu::BindGroupLayout,
     screen_pipeline: wgpu::RenderPipeline,
     screen_bind_group: wgpu::BindGroup,
+    sampler: wgpu::Sampler,
 }
 
 impl Raytracer {
-    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32) -> Self {
-        let (color_buffer, sampler, scene_data_buffer, objects_buffer) = create_assets(ctx);
-        let (rt_pipeline, rt_bind_group, screen_pipeline, screen_bind_group) = create_pipeline(
+    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32, render_scale: f32) -> Self {
+        let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
+            create_assets(ctx, render_scale);
+        let (
+            rt_bind_group_layout,
+            rt_pipeline,
+            rt_bind_group,
+            screen_bind_group_layout,
+            screen_pipeline,
+            screen_bind_group,
+        ) = create_pipeline(
             ctx,
             &color_buffer,
             &sampler,
@@ -35,19 +48,23 @@ impl Raytracer {
             scene_data_buffer,
             objects_buffer,
             max_bounces,
+            render_scale,
+            rt_bind_group_layout,
             rt_pipeline,
             rt_bind_group,
+            screen_bind_group_layout,
             screen_pipeline,
             screen_bind_group,
+            sampler,
         }
     }
 }
 
 impl Layer for Raytracer {
     fn on_ui_render(&mut self, ctx: &egui::Context) {
-        let frame = egui::containers::Frame {
+        let frame = Frame {
             fill: egui::Color32::TRANSPARENT,
-            stroke: egui::Stroke::new(2.0, egui::Color32::WHITE),
+            inner_margin: Margin::same(10.0),
             ..Default::default()
         };
         egui::TopBottomPanel::top("my panel")
@@ -73,7 +90,7 @@ impl Layer for Raytracer {
         let primitives = scene.get_primitives();
         let camera = scene.get_camera();
         let (pixel00_loc, pixel_delta_u, pixel_delta_v) = viewport_vectors(
-            vec2(ctx.viewport.width as f32, ctx.viewport.height as f32),
+            vec2(ctx.viewport.width as f32, ctx.viewport.height as f32) * self.render_scale,
             camera.pos,
         );
         let scene_data = SceneData::new(
@@ -130,14 +147,33 @@ impl Layer for Raytracer {
 
         encoder.finish()
     }
+
+    fn on_resize(&mut self, ctx: &mut WgpuCtx) {
+        let color_buffer_view = create_color_buffer(ctx, self.render_scale)
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.rt_bind_group = create_rt_bind_group(
+            ctx,
+            &self.rt_bind_group_layout,
+            &color_buffer_view,
+            &self.scene_data_buffer,
+            &self.objects_buffer,
+        );
+        self.screen_bind_group = create_screen_bind_group(
+            ctx,
+            &self.screen_bind_group_layout,
+            &self.sampler,
+            &color_buffer_view,
+        );
+    }
 }
 
-fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buffer, wgpu::Buffer) {
-    let color_buffer = ctx.device.create_texture(&wgpu::TextureDescriptor {
+fn create_color_buffer(ctx: &WgpuCtx, scale: f32) -> wgpu::Texture {
+    ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("Raytracer color buffer"),
         size: wgpu::Extent3d {
-            width: ctx.viewport.width,
-            height: ctx.viewport.height,
+            width: (ctx.viewport.width as f32 * scale) as u32,
+            height: (ctx.viewport.height as f32 * scale) as u32,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -146,7 +182,63 @@ fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buff
         format: FORMAT,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
         view_formats: &[],
-    });
+    })
+}
+
+fn create_rt_bind_group(
+    ctx: &WgpuCtx,
+    rt_bind_group_layout: &wgpu::BindGroupLayout,
+    color_buffer_view: &wgpu::TextureView,
+    scene_data_buffer: &wgpu::Buffer,
+    objects_buffer: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Raytracer bind group"),
+        layout: rt_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(color_buffer_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: scene_data_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: objects_buffer.as_entire_binding(),
+            },
+        ],
+    })
+}
+
+fn create_screen_bind_group(
+    ctx: &WgpuCtx,
+    screen_bind_group_layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    color_buffer_view: &wgpu::TextureView,
+) -> wgpu::BindGroup {
+    ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Raytracer screen bind group"),
+        layout: screen_bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(color_buffer_view),
+            },
+        ],
+    })
+}
+
+fn create_assets(
+    ctx: &WgpuCtx,
+    render_scale: f32,
+) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buffer, wgpu::Buffer) {
+    let color_buffer = create_color_buffer(ctx, render_scale);
 
     let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("Raytracer screen sampler"),
@@ -177,14 +269,16 @@ fn create_assets(ctx: &mut WgpuCtx) -> (wgpu::Texture, wgpu::Sampler, wgpu::Buff
 }
 
 fn create_pipeline(
-    ctx: &mut WgpuCtx,
+    ctx: &WgpuCtx,
     color_buffer: &wgpu::Texture,
     sampler: &wgpu::Sampler,
     scene_data_buffer: &wgpu::Buffer,
     objects_buffer: &wgpu::Buffer,
 ) -> (
+    wgpu::BindGroupLayout,
     wgpu::ComputePipeline,
     wgpu::BindGroup,
+    wgpu::BindGroupLayout,
     wgpu::RenderPipeline,
     wgpu::BindGroup,
 ) {
@@ -229,24 +323,13 @@ fn create_pipeline(
                 ],
             });
     let color_buffer_view = color_buffer.create_view(&wgpu::TextureViewDescriptor::default());
-    let rt_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Raytracer bind group"),
-        layout: &rt_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&color_buffer_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: scene_data_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: objects_buffer.as_entire_binding(),
-            },
-        ],
-    });
+    let rt_bind_group = create_rt_bind_group(
+        ctx,
+        &rt_bind_group_layout,
+        &color_buffer_view,
+        scene_data_buffer,
+        objects_buffer,
+    );
 
     let rt_pipeline_layout = ctx
         .device
@@ -295,20 +378,8 @@ fn create_pipeline(
                     },
                 ],
             });
-    let screen_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Raytracer screen bind group"),
-        layout: &screen_bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&color_buffer_view),
-            },
-        ],
-    });
+    let screen_bind_group =
+        create_screen_bind_group(ctx, &screen_bind_group_layout, sampler, &color_buffer_view);
 
     let screen_pipeline_layout =
         ctx.device
@@ -362,8 +433,10 @@ fn create_pipeline(
             multiview: None,
         });
     (
+        rt_bind_group_layout,
         rt_pipeline,
         rt_bind_group,
+        screen_bind_group_layout,
         screen_pipeline,
         screen_bind_group,
     )

@@ -1,7 +1,7 @@
 use crate::{app::WgpuCtx, scene::Scene};
 
 pub trait Layer {
-    fn on_attach(&mut self, ctx: &mut WgpuCtx) {}
+    fn on_attach(&mut self, _ctx: &mut WgpuCtx) {}
     fn on_detach(&mut self) {}
 
     fn on_ui_render(&mut self, _ctx: &egui::Context) {}
@@ -12,4 +12,6 @@ pub trait Layer {
         view: &wgpu::TextureView,
         scene: &Scene,
     ) -> wgpu::CommandBuffer;
+
+    fn on_resize(&mut self, ctx: &mut WgpuCtx);
 }
