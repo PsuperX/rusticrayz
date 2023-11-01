@@ -473,11 +473,10 @@ struct SceneData {
     pixel_delta_u: Vec3,
     _padding1: u32,
     pixel_delta_v: Vec3,
-    _padding2: u32,
 
     max_bounces: i32,
     primitive_count: i32,
-    _padding3: [u32; 2],
+    _padding2: [u32; 3],
 }
 
 impl SceneData {
@@ -499,7 +498,6 @@ impl SceneData {
             _padding0: Default::default(),
             _padding1: Default::default(),
             _padding2: Default::default(),
-            _padding3: Default::default(),
         }
     }
 }

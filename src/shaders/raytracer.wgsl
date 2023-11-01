@@ -2,6 +2,9 @@ struct Triangle {
     corner_a: vec3<f32>,
     corner_b: vec3<f32>,
     corner_c: vec3<f32>,
+    normal_a: vec3<f32>,
+    normal_b: vec3<f32>,
+    normal_c: vec3<f32>,
     color: vec3<f32>,
 }
 
@@ -80,8 +83,7 @@ fn rayColor(ray: Ray) -> vec3<f32> {
     }
 
     if hit_something {
-        return hit.color;
-        // return hit.position;
+        return hit.normal;
     }
 
     // Miss
@@ -91,49 +93,43 @@ fn rayColor(ray: Ray) -> vec3<f32> {
 }
 
 fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHit: HitRecord) -> HitRecord {
-    // Set up a blank hitRecord,
-    // right now this hasn't hit anything
-    var result: HitRecord;
-    result.color = oldHit.color;
+    var hit: HitRecord;
+    hit.hit = false;
 
-    // Compute the triangle's normal and a vector on the triangle's plane
-    var N: vec3<f32> = cross(triangle.corner_b - triangle.corner_a, triangle.corner_c - triangle.corner_a);
-    var d: f32 = -dot(N, triangle.corner_a);
+    let e1 = triangle.corner_b - triangle.corner_a;
+    let e2 = triangle.corner_c - triangle.corner_a;
+    let h = cross(ray.dir, e2);
+    let a = dot(e1, h);
 
-    // Compute the ray-plane intersection point
-    var t: f32 = -(dot(N, ray.orig) + d) / dot(N, ray.dir);
-
-    // Check if the intersection point is in range
-    if t < t_min && t > t_max {
-        return result;
+    if abs(a) < 0.00001 {
+        return hit; // The ray is nearly parallel to the triangle
     }
 
-    // Calculate the intersection point
-    var intersection_point: vec3<f32> = ray.orig + t * ray.dir;
+    let f = 1.0 / a;
+    let s = ray.orig - triangle.corner_a;
+    let u = f * dot(s, h);
 
-    // Calculate vectors between the intersection point and triangle vertices
-    var e0: vec3<f32> = triangle.corner_b - triangle.corner_a;
-    var e1: vec3<f32> = triangle.corner_c - triangle.corner_b;
-    var e2: vec3<f32> = triangle.corner_a - triangle.corner_c;
-    var c0: vec3<f32> = intersection_point - triangle.corner_a;
-    var c1: vec3<f32> = intersection_point - triangle.corner_b;
-    var c2: vec3<f32> = intersection_point - triangle.corner_c;
-
-    var h0: vec3<f32> = cross(e0, c0);
-    var h1: vec3<f32> = cross(e1, c1);
-    var h2: vec3<f32> = cross(e2, c2);
-
-    // Perform the edge tests
-    if dot(N, h0) >= 0.0 && dot(N, h1) >= 0.0 && dot(N, h2) >= 0.0 {
-        // Intersection occurred
-        result.t = t;
-        result.color = triangle.color;
-        result.hit = true;
-        result.position = intersection_point;
-        result.normal = N;
-        return result;
+    if u < 0.0 || u > 1.0 {
+        return hit; // The intersection point is outside the triangle
     }
 
-    result.hit = false;
-    return result;
+    let q = cross(s, e1);
+    let v = f * dot(ray.dir, q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return hit; // The intersection point is outside the triangle
+    }
+
+    let t = f * dot(e2, q);
+
+    if t > 0.00001 {
+        hit.hit = true;
+        hit.color = triangle.color;
+        hit.t = t;
+        hit.position = ray.orig + t * ray.dir;
+        hit.normal = (1.0 - u - v) * triangle.normal_a + u * triangle.normal_b + v * triangle.normal_c;
+        return hit;
+    }
+
+    return hit;
 }
