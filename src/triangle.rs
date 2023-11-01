@@ -1,4 +1,5 @@
 use glam::{vec3, Vec3};
+use rand::Rng;
 
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -33,6 +34,53 @@ impl Triangle {
             color,
             ..Default::default()
         }
+    }
+
+    pub fn random() -> Self {
+        let mut rng = rand::thread_rng();
+        let random_corners: [Vec3; 3] = [
+            Vec3::new(
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+            ),
+            Vec3::new(
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+            ),
+            Vec3::new(
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+                rng.gen_range(-50.0..50.0),
+            ),
+        ];
+
+        let random_normals: [Vec3; 3] = [
+            Vec3::new(
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+            ),
+            Vec3::new(
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+            ),
+            Vec3::new(
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+                rng.gen_range(-3.0..3.0),
+            ),
+        ];
+
+        let random_color = Vec3::new(
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.0..1.0),
+        );
+
+        Triangle::new(random_corners, random_normals, random_color)
     }
 }
 

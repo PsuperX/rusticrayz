@@ -37,6 +37,7 @@ struct HitRecord {
     hit: bool,
     position: vec3<f32>,
     normal: vec3<f32>,
+    is_front_face: bool,
 }
 
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
@@ -126,8 +127,11 @@ fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHi
         hit.hit = true;
         hit.color = triangle.color;
         hit.t = t;
+        // TODO: We might end up hitting something closer as we do our search,
+        // and we will only need the normal of the closest thing
         hit.position = ray.orig + t * ray.dir;
-        hit.normal = (1.0 - u - v) * triangle.normal_a + u * triangle.normal_b + v * triangle.normal_c;
+        hit.normal = normalize((1.0 - u - v) * triangle.normal_a + u * triangle.normal_b + v * triangle.normal_c);
+        hit.is_front_face = dot(ray.dir, hit.normal) < 0.0;
         return hit;
     }
 
