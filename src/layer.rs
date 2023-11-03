@@ -13,5 +13,5 @@ pub trait Layer {
         scene: &Scene,
     ) -> wgpu::CommandBuffer;
 
-    fn on_resize(&mut self, ctx: &mut WgpuCtx);
+    fn on_resize(&mut self, ctx: &WgpuCtx);
 }

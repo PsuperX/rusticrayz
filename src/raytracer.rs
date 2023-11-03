@@ -1,8 +1,7 @@
 use crate::{app::WgpuCtx, camera::CameraUniform, layer::Layer, scene::Scene, triangle::Triangle};
 use egui::{containers::Frame, Margin};
 use glam::{vec2, vec3, Vec2, Vec3};
-use std::{borrow::Cow, mem};
-use tracing::info;
+use std::{borrow::Cow, mem, ops::RangeInclusive};
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const MAX_TRIANGLE_COUNT: u64 = 32;
@@ -11,6 +10,7 @@ pub struct Raytracer {
     // Assets
     scene_data_buffer: wgpu::Buffer,
     objects_buffer: wgpu::Buffer,
+    color_buff_needs_resize: bool,
 
     max_bounces: i32,
     samples_per_pixel: i32,
@@ -27,7 +27,12 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32, samples_per_pixel: i32, render_scale: f32) -> Self {
+    pub fn new(
+        ctx: &mut WgpuCtx,
+        max_bounces: i32,
+        samples_per_pixel: i32,
+        render_scale: f32,
+    ) -> Self {
         let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
             create_assets(ctx, render_scale);
         let (
@@ -48,6 +53,7 @@ impl Raytracer {
         Self {
             scene_data_buffer,
             objects_buffer,
+            color_buff_needs_resize: false,
             max_bounces,
             samples_per_pixel,
             render_scale,
@@ -69,18 +75,36 @@ impl Layer for Raytracer {
             inner_margin: Margin::same(10.0),
             ..Default::default()
         };
-        egui::TopBottomPanel::top("my panel")
+        egui::Window::new("Settings")
             .frame(frame)
+            .auto_sized()
             .show(ctx, |ui| {
-                ui.label(egui::RichText::new("Hello world!").color(egui::Color32::WHITE));
-                if ui.button("Click me").clicked() {
-                    info!("Click! :D");
+                slider_with_color(
+                    &mut self.max_bounces,
+                    0..=100,
+                    "Max Bounces",
+                    ui,
+                    egui::Color32::BLACK,
+                );
+                slider_with_color(
+                    &mut self.samples_per_pixel,
+                    1..=100,
+                    "Samples per pixel",
+                    ui,
+                    egui::Color32::BLACK,
+                );
+                if slider_with_color(
+                    &mut self.render_scale,
+                    0.1..=2.0,
+                    "Render Scale",
+                    ui,
+                    egui::Color32::BLACK,
+                )
+                .changed()
+                {
+                    self.color_buff_needs_resize = true;
                 }
             });
-
-        egui::Window::new("My Window").show(ctx, |ui| {
-            ui.label(":D");
-        });
     }
 
     fn on_draw_frame(
@@ -89,12 +113,16 @@ impl Layer for Raytracer {
         view: &wgpu::TextureView,
         scene: &Scene,
     ) -> wgpu::CommandBuffer {
+        if self.color_buff_needs_resize {
+            self.on_resize(ctx);
+        }
+
         let primitives = scene.get_primitives();
         let camera = scene.get_camera();
-        let (pixel00_loc, pixel_delta_u, pixel_delta_v) = viewport_vectors(
-            vec2(ctx.viewport.width as f32, ctx.viewport.height as f32) * self.render_scale,
-            camera.pos,
-        );
+        let color_buffer_size =
+            vec2(ctx.viewport.width as f32, ctx.viewport.height as f32) * self.render_scale;
+        let (pixel00_loc, pixel_delta_u, pixel_delta_v) =
+            viewport_vectors(color_buffer_size, camera.pos);
         let scene_data = SceneData::new(
             camera.get_uniform(),
             self.max_bounces,
@@ -126,7 +154,11 @@ impl Layer for Raytracer {
 
             rt_compute_pass.set_pipeline(&self.rt_pipeline);
             rt_compute_pass.set_bind_group(0, &self.rt_bind_group, &[]);
-            rt_compute_pass.dispatch_workgroups(ctx.viewport.width, ctx.viewport.height, 1);
+            rt_compute_pass.dispatch_workgroups(
+                color_buffer_size.x as u32,
+                color_buffer_size.y as u32,
+                1,
+            );
         }
 
         {
@@ -151,7 +183,7 @@ impl Layer for Raytracer {
         encoder.finish()
     }
 
-    fn on_resize(&mut self, ctx: &mut WgpuCtx) {
+    fn on_resize(&mut self, ctx: &WgpuCtx) {
         let color_buffer_view = create_color_buffer(ctx, self.render_scale)
             .create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -465,6 +497,20 @@ fn viewport_vectors(screen_size: Vec2, camera_pos: Vec3) -> (Vec3, Vec3, Vec3) {
     let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
     (pixel00_loc, pixel_delta_u, pixel_delta_v)
+}
+
+fn slider_with_color<T>(
+    value: &mut T,
+    range: RangeInclusive<T>,
+    text: &str,
+    ui: &mut egui::Ui,
+    color: egui::Color32,
+) -> egui::Response
+where
+    T: egui::emath::Numeric,
+{
+    ui.colored_label(color, text);
+    ui.add(egui::Slider::new(value, range))
 }
 
 #[repr(C, align(16))]
