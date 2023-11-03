@@ -12,6 +12,7 @@ const MSAA_SAMPLES: u32 = 1;
 const EGUI_MIN_REDRAW_TIME: f32 = 1.0 / 60.0;
 const RENDER_SCALE: f32 = 1.0;
 const MAX_BOUNCES: i32 = 50;
+const SAMPLES_PER_PIXEL: i32 = 10;
 
 pub struct Application {
     window: Window,
@@ -88,7 +89,12 @@ impl Application {
         self.is_running = true;
 
         // TODO: find a better place for this
-        let raytracer = Raytracer::new(&mut self.wgpu_ctx, MAX_BOUNCES, RENDER_SCALE);
+        let raytracer = Raytracer::new(
+            &mut self.wgpu_ctx,
+            MAX_BOUNCES,
+            SAMPLES_PER_PIXEL,
+            RENDER_SCALE,
+        );
         self.push_layer(Box::new(raytracer));
 
         use winit::platform::run_return::EventLoopExtRunReturn;

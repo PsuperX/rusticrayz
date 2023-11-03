@@ -13,6 +13,7 @@ pub struct Raytracer {
     objects_buffer: wgpu::Buffer,
 
     max_bounces: i32,
+    samples_per_pixel: i32,
     render_scale: f32,
 
     // Pipeline stuff
@@ -26,7 +27,7 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32, render_scale: f32) -> Self {
+    pub fn new(ctx: &mut WgpuCtx, max_bounces: i32, samples_per_pixel: i32, render_scale: f32) -> Self {
         let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
             create_assets(ctx, render_scale);
         let (
@@ -48,6 +49,7 @@ impl Raytracer {
             scene_data_buffer,
             objects_buffer,
             max_bounces,
+            samples_per_pixel,
             render_scale,
             rt_bind_group_layout,
             rt_pipeline,
@@ -96,6 +98,7 @@ impl Layer for Raytracer {
         let scene_data = SceneData::new(
             camera.get_uniform(),
             self.max_bounces,
+            self.samples_per_pixel,
             primitives.len() as i32,
             pixel00_loc,
             pixel_delta_u,
@@ -475,14 +478,16 @@ struct SceneData {
     pixel_delta_v: Vec3,
 
     max_bounces: i32,
+    samples_per_pixel: i32,
     primitive_count: i32,
-    _padding2: [u32; 3],
+    _padding2: [u32; 2],
 }
 
 impl SceneData {
     fn new(
         camera: CameraUniform,
         max_bounces: i32,
+        samples_per_pixel: i32,
         primitive_count: i32,
         pixel00_loc: Vec3,
         pixel_delta_u: Vec3,
@@ -494,6 +499,7 @@ impl SceneData {
             pixel_delta_u,
             pixel_delta_v,
             max_bounces,
+            samples_per_pixel,
             primitive_count,
             _padding0: Default::default(),
             _padding1: Default::default(),

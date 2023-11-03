@@ -28,6 +28,7 @@ struct SceneData {
     pixel_delta_v: vec3<f32>,
 
     maxBounces: i32,
+    samples_per_pixel: i32,
     primitiveCount: i32,
 }
 
@@ -46,34 +47,59 @@ struct HitRecord {
 
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
-    let screen_size: vec2<i32> = vec2<i32>(textureDimensions(color_buffer));
-    let screen_pos: vec2<i32> = vec2<i32>(i32(GlobalInvocationID.x), i32(GlobalInvocationID.y));
+    let screen_size = vec2<i32>(textureDimensions(color_buffer));
+    let screen_pos = vec2<i32>(i32(GlobalInvocationID.x), i32(GlobalInvocationID.y));
 
     if screen_pos.x >= screen_size.x || screen_pos.y >= screen_size.y {
         return;
     }
 
-    let pixel_center: vec3<f32> = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
-    let ray_direction: vec3<f32> = pixel_center - scene.camera_pos;
+    // Initialize RNG
+    seed = u32(screen_pos.y);
+    seed = u32(screen_pos.x) + randi();
+    randi();
 
-    var ray: Ray;
-    ray.dir = ray_direction;
-    ray.orig = scene.camera_pos;
+    let pixel_center = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
+    let ray_direction = pixel_center - scene.camera_pos;
 
-    let pixel_color: vec3<f32> = rayColor(ray);
+    var pixel_color: vec3<f32>;
+    for (var i = 0; i < scene.samples_per_pixel; i++) {
+        let ray = getRay(screen_pos.x, screen_pos.y, scene.pixel00_loc, scene.pixel_delta_u, scene.pixel_delta_v, scene.camera_pos);
+        pixel_color += rayColor(ray);
+    }
+    pixel_color /= f32(scene.samples_per_pixel);
 
     textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
 
-fn rayColor(ray: Ray) -> vec3<f32> {
-    var color: vec3<f32> = vec3(0.0, 0.0, 0.0);
+fn getRay(x: i32, y: i32, pixel00_loc: vec3<f32>, pixel_delta_u: vec3<f32>, pixel_delta_v: vec3<f32>, center: vec3<f32>) -> Ray {
+    let pixel_center = pixel00_loc + (f32(x) * pixel_delta_u) + (f32(y) * pixel_delta_v);
+    let pixel_sample = pixel_center + pixel_sample_square();
 
-    var nearest_hit: f32 = 9999.0;
-    var hit_something: bool = false;
+    let ray_origin = center;
+    let ray_direction = pixel_sample - ray_origin;
+
+    var ray: Ray;
+    ray.orig = ray_origin;
+    ray.dir = ray_direction;
+    return ray;
+}
+
+fn pixel_sample_square() -> vec3<f32> {
+    let px = -0.5 + rand();
+    let py = -0.5 + rand();
+    return (px * scene.pixel_delta_u) + (py * scene.pixel_delta_v);
+}
+
+fn rayColor(ray: Ray) -> vec3<f32> {
+    var color = vec3<f32>(0.0, 0.0, 0.0);
+
+    var nearest_hit = 9999.0;
+    var hit_something = false;
 
     var hit: HitRecord;
 
-    for (var i: i32 = 0; i < scene.primitiveCount; i++) {
+    for (var i = 0; i < scene.primitiveCount; i++) {
         var new_render_state: HitRecord = triangleIntersect(ray, objects.triangles[i], 0.001, nearest_hit, hit);
 
         if new_render_state.hit {
@@ -88,7 +114,7 @@ fn rayColor(ray: Ray) -> vec3<f32> {
     }
 
     // Miss
-    let unit_dir: vec3<f32> = normalize(ray.dir);
+    let unit_dir = normalize(ray.dir);
     let a = 0.5 * (unit_dir.y + 1.0);
     return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 }
@@ -136,4 +162,56 @@ fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHi
     }
 
     return hit;
+}
+
+
+// Random number generator
+var<private> seed: u32;
+
+// --- choose one:
+// Returns a random integer
+// fn randi(x: u32) {
+//     seed = lowbias32(x);
+//     return seed;
+// }
+
+// Returns a random integer
+fn randi() -> u32 {
+    seed = triple32(seed);
+    return seed;
+}
+
+// Returns a random real in [0,1).
+fn rand() -> f32 {
+    return f32(randi()) / f32(0xffffffffu);
+}
+
+// Returns a random real in [min,max).
+fn rand_range(min: f32, max: f32) -> f32 {
+    return min + (max - min) * rand();
+}
+
+// Source: https://www.shadertoy.com/view/WttXWX
+//bias: 0.17353355999581582 ( very probably the best of its kind )
+fn lowbias32(seed: u32) -> u32 {
+    var x = seed;
+    x ^= x >> 16u;
+    x *= 0x7feb352du;
+    x ^= x >> 15u;
+    x *= 0x846ca68bu;
+    x ^= x >> 16u;
+    return x;
+}
+
+// bias: 0.020888578919738908 = minimal theoretic limit
+fn triple32(seed: u32) -> u32 {
+    var x = seed;
+    x ^= x >> 17u;
+    x *= 0xed5ad4bbu;
+    x ^= x >> 11u;
+    x *= 0xac4c1b51u;
+    x ^= x >> 15u;
+    x *= 0x31848babu;
+    x ^= x >> 14u;
+    return x;
 }
