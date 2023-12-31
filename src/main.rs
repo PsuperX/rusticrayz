@@ -62,12 +62,11 @@ mod graph {
     /// Raytracer sub-graph name
     pub const NAME: &str = "raytracer";
 
-    // TODO: Use
-    mod node {
+    pub mod node {
         /// Main raytracer compute shader
-        pub const RAYTRACER: &str = "raytracer";
+        pub const RAYTRACER: &str = "raytracer_pass";
         /// Write result of RAYTRACER to screen
-        pub const SCREEN: &str = "screen";
+        pub const SCREEN: &str = "screen_pass";
     }
 }
 
@@ -89,25 +88,36 @@ impl Plugin for RaytracerPlugin {
         // Nodes
         render_app.add_render_graph_node::<ViewNodeRunner<RaytracerNode>>(
             graph::NAME,
-            RaytracerNode::NAME,
+            graph::node::RAYTRACER,
         );
+        render_app
+            .add_render_graph_node::<ViewNodeRunner<ScreenNode>>(graph::NAME, graph::node::SCREEN);
+
+        // Edges (aka dependencies)
+        render_app.add_render_graph_edge(graph::NAME, graph::node::RAYTRACER, graph::node::SCREEN);
     }
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
         render_app.init_resource::<RaytracerPipeline>();
+        render_app.init_resource::<ScreenPipeline>();
     }
 }
 
 #[derive(Resource)]
 struct RaytracerBindGroup {
     rt_bind_group: BindGroup,
+}
+
+#[derive(Resource)]
+struct ScreenBindGroup {
     screen_bind_group: BindGroup,
 }
 
 fn prepare_bind_group(
     mut commands: Commands,
-    pipeline: Res<RaytracerPipeline>,
+    rt_pipeline: Res<RaytracerPipeline>,
+    screen_pipeline: Res<ScreenPipeline>,
     render_device: Res<RenderDevice>,
 ) {
     info!("prepare bind group");
@@ -119,7 +129,7 @@ fn prepare_bind_group(
     // TODO: i dont think bindgroups should be created every frame D:
     let rt_bind_group = render_device.create_bind_group(
         Some("raytracer_rt_bind_group"),
-        &pipeline.rt_bind_group_layout,
+        &rt_pipeline.rt_bind_group_layout,
         &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -137,7 +147,7 @@ fn prepare_bind_group(
     );
     let screen_bind_group = render_device.create_bind_group(
         Some("raytracer_screen_bind_group"),
-        &pipeline.screen_bind_group_layout,
+        &screen_pipeline.screen_bind_group_layout,
         &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -150,10 +160,8 @@ fn prepare_bind_group(
         ],
     );
 
-    commands.insert_resource(RaytracerBindGroup {
-        rt_bind_group,
-        screen_bind_group,
-    });
+    commands.insert_resource(RaytracerBindGroup { rt_bind_group });
+    commands.insert_resource(ScreenBindGroup { screen_bind_group });
 }
 
 fn create_assets(device: &RenderDevice, render_scale: f32) -> (Texture, Sampler, Buffer, Buffer) {
@@ -208,8 +216,6 @@ fn create_color_buffer(device: &RenderDevice, scale: f32) -> Texture {
 pub struct RaytracerPipeline {
     rt_bind_group_layout: BindGroupLayout,
     rt_pipeline_id: CachedComputePipelineId,
-    screen_bind_group_layout: BindGroupLayout,
-    screen_pipeline_id: CachedRenderPipelineId,
 }
 
 impl FromWorld for RaytracerPipeline {
@@ -267,6 +273,22 @@ impl FromWorld for RaytracerPipeline {
             entry_point: Cow::from("main"),
         });
 
+        Self {
+            rt_bind_group_layout,
+            rt_pipeline_id,
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct ScreenPipeline {
+    screen_bind_group_layout: BindGroupLayout,
+    screen_pipeline_id: CachedRenderPipelineId,
+}
+
+impl FromWorld for ScreenPipeline {
+    fn from_world(world: &mut World) -> Self {
+        let render_device = world.resource::<RenderDevice>();
         let screen_bind_group_layout =
             render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("raytracer_screen_layout"),
@@ -291,6 +313,7 @@ impl FromWorld for RaytracerPipeline {
             });
 
         let screen_shader = world.resource::<AssetServer>().load("shaders/screen.wgsl");
+        let pipeline_cache = world.resource::<PipelineCache>();
         let screen_pipeline_id = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
             label: None,
             layout: vec![screen_bind_group_layout.clone()],
@@ -328,9 +351,7 @@ impl FromWorld for RaytracerPipeline {
             }),
         });
 
-        RaytracerPipeline {
-            rt_bind_group_layout,
-            rt_pipeline_id,
+        Self {
             screen_bind_group_layout,
             screen_pipeline_id,
         }
@@ -341,7 +362,7 @@ impl FromWorld for RaytracerPipeline {
 pub struct RaytracerPipelineKey;
 
 // TODO: I dont think this is being used... i think it should...
-impl SpecializedRenderPipeline for RaytracerPipeline {
+impl SpecializedRenderPipeline for ScreenPipeline {
     type Key = RaytracerPipelineKey;
 
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
@@ -386,9 +407,6 @@ impl SpecializedRenderPipeline for RaytracerPipeline {
 
 #[derive(Default)]
 struct RaytracerNode;
-impl RaytracerNode {
-    pub const NAME: &'static str = "raytracer_node";
-}
 
 impl render_graph::ViewNode for RaytracerNode {
     // ViewTargets are cameras
@@ -401,7 +419,7 @@ impl render_graph::ViewNode for RaytracerNode {
         view_query: <Self::ViewQuery as WorldQuery>::Item<'_>,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        info!("Node run");
+        info!("Raytracer Node run");
 
         let bind_groups = world.resource::<RaytracerBindGroup>();
         let pipeline_cache = world.resource::<PipelineCache>();
@@ -420,7 +438,30 @@ impl render_graph::ViewNode for RaytracerNode {
             compute_pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
         }
 
-        // Screen pass
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct ScreenNode;
+
+impl render_graph::ViewNode for ScreenNode {
+    // ViewTargets are cameras
+    type ViewQuery = &'static ViewTarget;
+
+    fn run(
+        &self,
+        graph: &mut render_graph::RenderGraphContext,
+        render_context: &mut RenderContext,
+        view_query: <Self::ViewQuery as WorldQuery>::Item<'_>,
+        world: &World,
+    ) -> Result<(), render_graph::NodeRunError> {
+        info!("Render Node run");
+
+        let bind_groups = world.resource::<ScreenBindGroup>();
+        let pipeline_cache = world.resource::<PipelineCache>();
+        let pipeline = world.resource::<ScreenPipeline>();
+
         {
             let mut render_pass =
                 render_context
