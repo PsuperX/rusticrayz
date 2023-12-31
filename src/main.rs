@@ -3,9 +3,10 @@ use bevy::{
     ecs::query::WorldQuery,
     prelude::*,
     render::{
+        camera::CameraRenderGraph,
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         render_asset::RenderAssets,
-        render_graph::{self, RenderGraphApp, ViewNodeRunner},
+        render_graph::{self, RenderGraph, RenderGraphApp, SlotInfo, SlotType, ViewNodeRunner},
         render_resource::*,
         renderer::{RenderContext, RenderDevice},
         view::ViewTarget,
@@ -47,6 +48,7 @@ fn setup(mut commands: Commands) {
     commands.spawn((Camera3dBundle {
         transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0))
             .looking_at(Vec3::default(), Vec3::Y),
+        camera_render_graph: CameraRenderGraph::new(graph::NAME),
         camera_3d: Camera3d {
             // clear_color: Color::WHITE.into(),
             ..default()
@@ -55,24 +57,39 @@ fn setup(mut commands: Commands) {
     },));
 }
 
+/// Render graph constants
+mod graph {
+    /// Raytracer sub-graph name
+    pub const NAME: &str = "raytracer";
+
+    // TODO: Use
+    mod node {
+        /// Main raytracer compute shader
+        pub const RAYTRACER: &str = "raytracer";
+        /// Write result of RAYTRACER to screen
+        pub const SCREEN: &str = "screen";
+    }
+}
+
 pub struct RaytracerPlugin;
 impl Plugin for RaytracerPlugin {
     fn build(&self, app: &mut App) {
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
+
         render_app.add_systems(
             Render,
             prepare_bind_group.in_set(RenderSet::PrepareBindGroups),
         );
 
+        // Add raytracer sub-graph
+        render_app.add_render_sub_graph(graph::NAME);
+
+        // Nodes
         render_app.add_render_graph_node::<ViewNodeRunner<RaytracerNode>>(
-            core_3d::graph::NAME,
+            graph::NAME,
             RaytracerNode::NAME,
-        );
-        render_app.add_render_graph_edges(
-            core_3d::graph::NAME,
-            &[RaytracerNode::NAME, core_3d::graph::node::END_MAIN_PASS],
         );
     }
 
