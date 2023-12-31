@@ -3,11 +3,11 @@
 #[allow(clippy::single_component_path_imports)]
 use link_dynamic;
 
-mod app;
-mod camera;
-mod layer;
-mod raytracer;
-mod scene;
-mod triangle;
-
-pub use app::Application;
+// mod app;
+// mod camera;
+// mod layer;
+// mod raytracer;
+// mod scene;
+// mod triangle;
+//
+// pub use app::Application;

@@ -68,7 +68,7 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
         // pixel_color += rayColor(ray);
     // }
     // pixel_color /= f32(scene.samples_per_pixel);
-    pixel_color = vec4<f32>(0.5, 0.5, 0.5, 1.0);
+    pixel_color = vec3<f32>(0.5, 0.5, 0.5);
 
     textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }

@@ -12,3 +12,24 @@ crate-type = ["dylib"]
 wgpu = "0.17"
 winit = "0.28"
 egui = "0.23"
+
+bevy = { version = "0.12", default-features = false, features = [
+  "bevy_asset",
+  "bevy_gilrs",
+  "bevy_scene",
+  "bevy_winit",
+  "bevy_core_pipeline",
+  "bevy_gltf",
+  "bevy_render",
+  "bevy_sprite",
+  "bevy_text",
+  "bevy_ui",
+  "multi-threaded",
+  "png",
+  "hdr",
+  "vorbis",
+  "x11",
+  "bevy_gizmos",
+  "tonemapping_luts",
+  "default_font",
+] }
