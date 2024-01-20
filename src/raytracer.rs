@@ -1,4 +1,4 @@
-use crate::{COLOR_BUFFER_FORMAT, SIZE, WORKGROUP_SIZE};
+use crate::{mesh::MeshMaterialBindGroup, COLOR_BUFFER_FORMAT, SIZE, WORKGROUP_SIZE};
 use bevy::{
     ecs::query::WorldQuery,
     prelude::*,
@@ -98,8 +98,7 @@ impl render_graph::ViewNode for RaytracerNode {
         _view_query: <Self::ViewQuery as WorldQuery>::Item<'_>,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        info!("Raytracer Node run");
-
+        let mesh_material_bind_group = world.resource::<MeshMaterialBindGroup>();
         let bind_groups = world.resource::<RaytracerBindGroup>();
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<RaytracerPipeline>();
@@ -114,6 +113,7 @@ impl render_graph::ViewNode for RaytracerNode {
                 .unwrap();
             compute_pass.set_pipeline(rt_pipeline);
             compute_pass.set_bind_group(0, &bind_groups.rt_bind_group, &[]);
+            compute_pass.set_bind_group(1, &mesh_material_bind_group.mesh_material, &[]);
             compute_pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
         }
 

@@ -5,46 +5,23 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-# Force dynamic linking, which improves iterative compile times
-dynamic = ["link-dynamic"]
-
 [dependencies]
 tracing = "0.1"
-tracing-subscriber = "0.3"
-# pollster = "0.3"
 wgpu = "0.17"
-# winit = "0.28"
-# egui = "0.23"
-# egui-wgpu = "0.23"
-# egui-winit = "0.23"
-glam = { version = "0.24", features = ["bytemuck", "rand"] }
+glam = { version = "0.25", features = ["bytemuck", "rand"] }
 bytemuck = "1.14"
 rand = "0.8"
-
-# bevy = { version = "0.12", default-features = false, features = [
-#   "bevy_asset",
-#   "bevy_gilrs",
-#   "bevy_scene",
-#   "bevy_winit",
-#   "bevy_core_pipeline",
-#   "bevy_gltf",
-#   "bevy_render",
-#   "bevy_sprite",
-#   "bevy_text",
-#   "bevy_ui",
-#   "multi-threaded",
-#   "png",
-#   "hdr",
-#   "vorbis",
-#   "x11",
-#   "bevy_gizmos",
-#   "tonemapping_luts",
-#   "default_font",
-# ] }
+itertools = "0.12"
+bvh = "0.7"
 
 bevy = { version = "0.12", features = ["dynamic_linking"] }
 bevy_mod_debugdump = "0.9"
 
 
-link-dynamic = { path = "link-dynamic", version = "0.1", optional = true }
+# Enable a small amount of optimization in debug mode
+[profile.dev]
+opt-level = 1
+
+# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
+[profile.dev.package."*"]
+opt-level = 3

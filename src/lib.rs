@@ -8,10 +8,12 @@ use bevy::{
         Render, RenderApp, RenderSet,
     },
 };
+use mesh::MeshPlugin;
 use raytracer::{RaytracerNode, RaytracerPipeline};
 use screen::{ScreenNode, ScreenPipeline};
 use std::mem;
 
+mod mesh;
 mod raytracer;
 mod screen;
 
@@ -39,6 +41,8 @@ const RENDER_SCALE: f32 = 1.0;
 pub struct RaytracerPlugin;
 impl Plugin for RaytracerPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(MeshPlugin);
+
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
@@ -78,6 +82,7 @@ fn prepare_bind_group(
 ) {
     info!("prepare bind group");
 
+    // TODO: maybe color_buffer should be a resource?
     let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
         create_assets(&render_device, RENDER_SCALE);
 

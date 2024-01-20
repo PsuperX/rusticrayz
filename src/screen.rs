@@ -108,8 +108,6 @@ impl render_graph::ViewNode for ScreenNode {
         view_query: <Self::ViewQuery as WorldQuery>::Item<'_>,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-        info!("Render Node run");
-
         let bind_groups = world.resource::<ScreenBindGroup>();
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ScreenPipeline>();

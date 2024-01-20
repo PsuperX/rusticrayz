@@ -41,9 +41,41 @@ struct HitRecord {
     is_front_face: bool,
 }
 
+struct Vertex {
+    position: vec3<f32>,
+    u: f32,
+    normal: vec3<f32>,
+    v: f32,
+};
+
+struct PrimitiveVertex {
+    position: vec3<f32>,
+    index: u32,
+};
+
+struct Primitive {
+    vertices: array<PrimitiveVertex, 3>,
+};
+
+struct Node {
+    min: vec3<f32>,
+    entry_index: u32,
+    max: vec3<f32>,
+    exit_index: u32,
+};
+
+struct Nodes {
+    count: u32,
+    data: array<Node>,
+};
+
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> scene: SceneData;
 @group(0) @binding(2) var<storage, read> objects: ObjectData;
+
+@group(1) @binding(0) var<storage> vertex_buffer: array<Vertex>;
+@group(1) @binding(1) var<storage> primitive_buffer: array<Primitive>;
+@group(1) @binding(2) var<storage> node_buffer: Nodes;
 
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
