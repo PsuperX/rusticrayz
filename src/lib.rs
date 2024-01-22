@@ -8,11 +8,13 @@ use bevy::{
         Render, RenderApp, RenderSet,
     },
 };
+use instance::InstancePlugin;
 use mesh::MeshPlugin;
 use raytracer::{RaytracerNode, RaytracerPipeline};
 use screen::{ScreenNode, ScreenPipeline};
 use std::mem;
 
+mod instance;
 mod mesh;
 mod raytracer;
 mod screen;
@@ -41,7 +43,7 @@ const RENDER_SCALE: f32 = 1.0;
 pub struct RaytracerPlugin;
 impl Plugin for RaytracerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MeshPlugin);
+        app.add_plugins((MeshPlugin, InstancePlugin));
 
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;

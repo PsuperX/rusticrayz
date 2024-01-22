@@ -6,7 +6,7 @@ use bevy::{
         renderer::{RenderDevice, RenderQueue},
         Extract, Render, RenderApp, RenderSet,
     },
-    utils::HashSet,
+    utils::{HashMap, HashSet},
 };
 use bvh::{
     aabb::{Bounded, AABB},
@@ -15,6 +15,8 @@ use bvh::{
 };
 use itertools::Itertools;
 use std::collections::BTreeMap;
+
+use crate::instance::{GpuInstance, InstanceRenderAssets};
 
 pub struct MeshPlugin;
 impl Plugin for MeshPlugin {
@@ -33,6 +35,7 @@ impl Plugin for MeshPlugin {
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
         render_app
+            .init_resource::<GpuMeshes>()
             .init_resource::<MeshRenderAssets>()
             .init_resource::<MeshMaterialBindGroupLayout>();
     }
@@ -105,6 +108,7 @@ fn extract_mesh_assets(
 fn prepare_mesh_assets(
     mut extracted_assets: ResMut<ExtractedMeshes>,
     mut assets: Local<BTreeMap<Handle<Mesh>, GpuMesh>>,
+    mut meshes: ResMut<GpuMeshes>,
     mut render_assets: ResMut<MeshRenderAssets>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
@@ -115,6 +119,7 @@ fn prepare_mesh_assets(
 
     for handle in extracted_assets.removed.drain(..) {
         assets.remove(&handle);
+        meshes.remove(&handle);
     }
     for (handle, mesh) in extracted_assets.extracted.drain(..) {
         match mesh.try_into() {
@@ -128,22 +133,26 @@ fn prepare_mesh_assets(
         }
     }
 
-    let vertices = assets
-        .values()
-        .flat_map(|mesh| &mesh.vertices)
-        .cloned()
-        .collect();
-    let primitives = assets
-        .values()
-        .flat_map(|mesh| &mesh.primitives)
-        .cloned()
-        .collect();
-    let nodes = assets
-        .values()
-        .flat_map(|mesh| &mesh.nodes)
-        .cloned()
-        .collect();
+    let mut vertices = vec![];
+    let mut primitives = vec![];
+    let mut nodes = vec![];
 
+    for (handle, mesh) in assets.iter() {
+        let vertex = vertices.len() as u32;
+        let primitive = primitives.len() as u32;
+        let node = UVec2::new(nodes.len() as u32, mesh.nodes.len() as u32);
+
+        let index = GpuMeshIndex {
+            vertex,
+            primitive,
+            node,
+        };
+        meshes.insert(handle.clone_weak(), index);
+
+        vertices.extend_from_slice(&mesh.vertices);
+        primitives.extend_from_slice(&mesh.primitives);
+        nodes.extend_from_slice(&mesh.nodes);
+    }
     render_assets.set(vertices, primitives, nodes);
     render_assets.write_buffer(&render_device, &render_queue);
 }
@@ -159,7 +168,7 @@ impl FromWorld for MeshMaterialBindGroupLayout {
                 // Vertices
                 BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::all(),
+                    visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
@@ -170,7 +179,7 @@ impl FromWorld for MeshMaterialBindGroupLayout {
                 // Primitives
                 BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: ShaderStages::all(),
+                    visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
@@ -178,10 +187,32 @@ impl FromWorld for MeshMaterialBindGroupLayout {
                     },
                     count: None,
                 },
-                // Asset nodes
+                // Mesh nodes
                 BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: ShaderStages::all(),
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(GpuNodeBuffer::min_size()),
+                    },
+                    count: None,
+                },
+                // Instances
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(GpuInstance::min_size()),
+                    },
+                    count: None,
+                },
+                // Instances nodes
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
@@ -205,12 +236,21 @@ fn queue_mesh_bind_group(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
     meshes: Res<MeshRenderAssets>,
+    instances: Res<InstanceRenderAssets>,
     mesh_material_layout: Res<MeshMaterialBindGroupLayout>,
 ) {
-    if let (Some(vertex_binding), Some(primitive_binding), Some(node_binding)) = (
+    if let (
+        Some(vertex_binding),
+        Some(primitive_binding),
+        Some(mesh_node_binding),
+        Some(instance_binding),
+        Some(instance_node_binding),
+    ) = (
         meshes.vertex_buffer.binding(),
         meshes.primitive_buffer.binding(),
         meshes.node_buffer.binding(),
+        instances.instance_buffer.binding(),
+        instances.instance_node_buffer.binding(),
     ) {
         let mesh_material = render_device.create_bind_group(
             "mesh_material_bindgroup",
@@ -226,7 +266,15 @@ fn queue_mesh_bind_group(
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: node_binding,
+                    resource: mesh_node_binding,
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: instance_binding,
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: instance_node_binding,
                 },
             ],
         );
@@ -235,6 +283,18 @@ fn queue_mesh_bind_group(
     } else {
         commands.remove_resource::<MeshMaterialBindGroup>()
     }
+}
+
+/// Holds all GPU representatives of mesh assets.
+#[derive(Default, Resource, Deref, DerefMut)]
+pub struct GpuMeshes(HashMap<Handle<Mesh>, GpuMeshIndex>);
+
+/// Offsets (and length for nodes) of the mesh in the universal buffer.
+#[derive(Debug, Default, Clone, Copy, ShaderType)]
+pub struct GpuMeshIndex {
+    pub vertex: u32,
+    pub primitive: u32,
+    pub node: UVec2,
 }
 
 #[derive(Default, Clone)]
@@ -432,7 +492,7 @@ pub struct GpuNode {
 }
 
 impl GpuNode {
-    fn pack(aabb: &AABB, entry_index: u32, exit_index: u32, primitive_index: u32) -> Self {
+    pub fn pack(aabb: &AABB, entry_index: u32, exit_index: u32, primitive_index: u32) -> Self {
         let entry_index = if entry_index == u32::MAX {
             primitive_index | 0x80000000
         } else {

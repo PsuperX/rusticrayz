@@ -57,6 +57,22 @@ struct Primitive {
     vertices: array<PrimitiveVertex, 3>,
 };
 
+struct MeshIndex {
+    vertex: u32,
+    primitive: u32,
+    node: vec2<u32>,    // x: offset, y: size
+};
+
+struct Instance {
+    min: vec3<f32>,
+    material: u32,
+    max: vec3<f32>,
+    node_index: u32,
+    model: mat4x4<f32>,
+    inverse_transpose_model: mat4x4<f32>,
+    mesh: MeshIndex,
+};
+
 struct Node {
     min: vec3<f32>,
     entry_index: u32,
@@ -73,9 +89,11 @@ struct Nodes {
 @group(0) @binding(1) var<uniform> scene: SceneData;
 @group(0) @binding(2) var<storage, read> objects: ObjectData;
 
-@group(1) @binding(0) var<storage> vertex_buffer: array<Vertex>;
-@group(1) @binding(1) var<storage> primitive_buffer: array<Primitive>;
-@group(1) @binding(2) var<storage> node_buffer: Nodes;
+@group(1) @binding(0) var<storage, read> vertex_buffer: array<Vertex>;
+@group(1) @binding(1) var<storage, read> primitive_buffer: array<Primitive>;
+@group(1) @binding(2) var<storage, read> node_buffer: Nodes;
+@group(1) @binding(3) var<storage, read> instance_buffer: array<Instance>;
+@group(1) @binding(4) var<storage, read> instance_node_buffer: Nodes;
 
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
