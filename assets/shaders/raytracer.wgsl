@@ -14,7 +14,13 @@ struct ObjectData {
 
 struct Ray {
     dir: vec3<f32>,
+    inv_dir: vec3<f32>,
     orig: vec3<f32>,
+}
+
+struct Aabb {
+    min: vec3<f32>,
+    max: vec3<f32>,
 }
 
 struct SceneData {
@@ -41,27 +47,38 @@ struct HitRecord {
     is_front_face: bool,
 }
 
+struct Intersection {
+    uv: vec2<f32>,
+    distance: f32,
+}
+
+struct Hit {
+    intersection: Intersection,
+    instance_index: u32,
+    primitive_index: u32,
+}
+
 struct Vertex {
     position: vec3<f32>,
     u: f32,
     normal: vec3<f32>,
     v: f32,
-};
+}
 
 struct PrimitiveVertex {
     position: vec3<f32>,
     index: u32,
-};
+}
 
 struct Primitive {
     vertices: array<PrimitiveVertex, 3>,
-};
+}
 
 struct MeshIndex {
     vertex: u32,
     primitive: u32,
     node: vec2<u32>,    // x: offset, y: size
-};
+}
 
 struct Instance {
     min: vec3<f32>,
@@ -71,19 +88,19 @@ struct Instance {
     model: mat4x4<f32>,
     inverse_transpose_model: mat4x4<f32>,
     mesh: MeshIndex,
-};
+}
 
 struct Node {
     min: vec3<f32>,
     entry_index: u32,
     max: vec3<f32>,
     exit_index: u32,
-};
+}
 
 struct Nodes {
     count: u32,
     data: array<Node>,
-};
+}
 
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> scene: SceneData;
@@ -91,9 +108,13 @@ struct Nodes {
 
 @group(1) @binding(0) var<storage, read> vertex_buffer: array<Vertex>;
 @group(1) @binding(1) var<storage, read> primitive_buffer: array<Primitive>;
-@group(1) @binding(2) var<storage, read> node_buffer: Nodes;
+@group(1) @binding(2) var<storage, read> primitive_node_buffer: Nodes;
 @group(1) @binding(3) var<storage, read> instance_buffer: array<Instance>;
 @group(1) @binding(4) var<storage, read> instance_node_buffer: Nodes;
+
+const F32_MAX = 3.4028235e38;
+const U32_MAX: u32 = 0xFFFFFFFFu;
+const BVH_LEAF_FLAG: u32 = 0x80000000u;
 
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
@@ -109,16 +130,30 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
     seed = u32(screen_pos.x) + randi();
     randi();
 
-    let pixel_center = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
-    let ray_direction = pixel_center - scene.camera_pos;
+    // let pixel_center = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
+    // let ray_direction = pixel_center - scene.camera_pos;
+    let pixel_center = vec3<f32>(-1.0, 0.6, 0.0) + (f32(screen_pos.x) * vec3<f32>(0.003, 0.0, 0.0)) + (f32(screen_pos.y) * vec3<f32>(0.0, -0.003, 0.0));
+    let ray_direction = pixel_center - vec3<f32>(0.0, 0.0, -9.0);
 
     var pixel_color: vec3<f32>;
-    // for (var i = 0; i < scene.samples_per_pixel; i++) {
+    let samples_per_pixel = 1;
+    for (var i = 0; i < samples_per_pixel; i++) {
         // let ray = getRay(screen_pos.x, screen_pos.y, scene.pixel00_loc, scene.pixel_delta_u, scene.pixel_delta_v, scene.camera_pos);
-        // pixel_color += rayColor(ray);
-    // }
-    // pixel_color /= f32(scene.samples_per_pixel);
-    pixel_color = vec3<f32>(0.5, 0.5, 0.5);
+        let ray = getRay(screen_pos.x, screen_pos.y, vec3<f32>(-1.0, 0.6, 0.0), vec3<f32>(0.003, 0.0, 0.0), vec3<f32>(0.0, -0.003, 0.0), vec3<f32>(0.0, 0.0, -9.0));
+        pixel_color += rayColor(ray);
+    }
+    pixel_color /= f32(samples_per_pixel);
+
+
+    /*
+    for (var i = 0; i < 12; i++) {
+        let ray = getRay(screen_pos.x, screen_pos.y, vec3<f32>(-1.0, 0.6, 0.0), vec3<f32>(0.003, 0.0, 0.0), vec3<f32>(0.0, -0.003, 0.0), vec3<f32>(0.0, 0.0, -9.0));
+        if intersectsTriangle(ray, primitive_buffer[i].vertices).distance > 0.0 {
+            pixel_color = vec3<f32>(1.0, 1.0, 0.0);
+        }
+    }
+    */
+
 
     textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
@@ -133,6 +168,7 @@ fn getRay(x: i32, y: i32, pixel00_loc: vec3<f32>, pixel_delta_u: vec3<f32>, pixe
     var ray: Ray;
     ray.orig = ray_origin;
     ray.dir = ray_direction;
+    ray.inv_dir = 1.0 / ray_direction;
     return ray;
 }
 
@@ -143,25 +179,9 @@ fn pixel_sample_square() -> vec3<f32> {
 }
 
 fn rayColor(ray: Ray) -> vec3<f32> {
-    var color = vec3<f32>(0.0, 0.0, 0.0);
-
-    var nearest_hit = 9999.0;
-    var hit_something = false;
-
-    var hit: HitRecord;
-
-    for (var i = 0; i < scene.primitiveCount; i++) {
-        var new_render_state: HitRecord = triangleIntersect(ray, objects.triangles[i], 0.001, nearest_hit, hit);
-
-        if new_render_state.hit {
-            nearest_hit = new_render_state.t;
-            hit = new_render_state;
-            hit_something = true;
-        }
-    }
-
-    if hit_something {
-        return hit.normal;
+    var new_render_state = traverseInstances(ray, F32_MAX);
+    if new_render_state.instance_index != U32_MAX {
+        return vec3<f32>(1.0, 0.0, 1.0);
     }
 
     // Miss
@@ -170,12 +190,107 @@ fn rayColor(ray: Ray) -> vec3<f32> {
     return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 }
 
-fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHit: HitRecord) -> HitRecord {
-    var hit: HitRecord;
-    hit.hit = false;
+fn traverseInstances(ray: Ray, max_distance: f32) -> Hit {
+    var hit: Hit;
+    hit.intersection.distance = max_distance;
+    hit.instance_index = U32_MAX;
+    hit.primitive_index = U32_MAX;
 
-    let e1 = triangle.corner_b - triangle.corner_a;
-    let e2 = triangle.corner_c - triangle.corner_a;
+    var index = 0u;
+    for (; index < instance_node_buffer.count;) {
+        let node = instance_node_buffer.data[index];
+        var aabb: Aabb;
+
+        if node.entry_index >= BVH_LEAF_FLAG {
+            let instance_index = node.entry_index - BVH_LEAF_FLAG;
+            let instance = instance_buffer[instance_index];
+            aabb.min = instance.min;
+            aabb.max = instance.max;
+
+            if intersectsAabb(ray, aabb) < hit.intersection.distance {
+                if traverseMesh(&hit, ray, instance.mesh) {
+                    hit.instance_index = instance_index;
+                }
+            }
+
+            index = node.exit_index;
+        } else {
+            aabb.min = node.min;
+            aabb.max = node.max;
+            index = select(
+                node.exit_index,
+                node.entry_index,
+                intersectsAabb(ray, aabb) < hit.intersection.distance
+            );
+        }
+    }
+
+    return hit;
+}
+
+fn traverseMesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex) -> bool {
+    var intersected = false;
+    var index = 0u;
+    for (; index < mesh.node.y;) {
+        let node_index = mesh.node.x + index;
+        let node = primitive_node_buffer.data[node_index];
+        var aabb: Aabb;
+        if node.entry_index >= BVH_LEAF_FLAG {
+            let primitive_index = mesh.primitive + node.entry_index - BVH_LEAF_FLAG;
+            let vertices = primitive_buffer[primitive_index].vertices;
+
+            aabb.min = min(vertices[0].position, min(vertices[1].position, vertices[2].position));
+            aabb.max = max(vertices[0].position, max(vertices[1].position, vertices[2].position));
+
+            if intersectsAabb(ray, aabb) < (*hit).intersection.distance {
+                let intersection = intersectsTriangle(ray, vertices);
+                if intersection.distance < (*hit).intersection.distance {
+                    (*hit).intersection = intersection;
+                    (*hit).primitive_index = primitive_index;
+                    intersected = true;
+                }
+            }
+
+            index = node.exit_index;
+        } else {
+            aabb.min = node.min;
+            aabb.max = node.max;
+            index = select(
+                node.exit_index,
+                node.entry_index,
+                intersectsAabb(ray, aabb) < (*hit).intersection.distance
+            );
+        }
+    }
+
+    return intersected;
+}
+
+fn intersectsAabb(ray: Ray, aabb: Aabb) -> f32 {
+    let t1 = (aabb.min - ray.orig) * ray.inv_dir;
+    let t2 = (aabb.max - ray.orig) * ray.inv_dir;
+
+    var t_min = min(t1.x, t2.x);
+    var t_max = max(t1.x, t2.x);
+
+    t_min = max(t_min, min(t1.y, t2.y));
+    t_max = min(t_max, max(t1.y, t2.y));
+
+    t_min = max(t_min, min(t1.z, t2.z));
+    t_max = min(t_max, max(t1.z, t2.z));
+
+    var t: f32 = F32_MAX;
+    if t_max >= t_min && t_max >= 0.0 {
+        t = t_min;
+    }
+    return t;
+}
+
+fn intersectsTriangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Intersection {
+    var hit: Intersection;
+
+    let e1 = triangle[1].position - triangle[0].position;
+    let e2 = triangle[2].position - triangle[0].position;
     let h = cross(ray.dir, e2);
     let a = dot(e1, h);
 
@@ -184,7 +299,7 @@ fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHi
     }
 
     let f = 1.0 / a;
-    let s = ray.orig - triangle.corner_a;
+    let s = ray.orig - triangle[0].position;
     let u = f * dot(s, h);
 
     if u < 0.0 || u > 1.0 {
@@ -200,18 +315,8 @@ fn triangleIntersect(ray: Ray, triangle: Triangle, t_min: f32, t_max: f32, oldHi
 
     let t = f * dot(e2, q);
 
-    if t > 0.00001 {
-        hit.hit = true;
-        hit.color = triangle.color;
-        hit.t = t;
-        // TODO: We might end up hitting something closer as we do our search,
-        // and we will only need the normal of the closest thing
-        hit.position = ray.orig + t * ray.dir;
-        hit.normal = normalize((1.0 - u - v) * triangle.normal_a + u * triangle.normal_b + v * triangle.normal_c);
-        hit.is_front_face = dot(ray.dir, hit.normal) < 0.0;
-        return hit;
-    }
-
+    hit.distance = t;
+    hit.uv = vec2<f32>(u, v);
     return hit;
 }
 

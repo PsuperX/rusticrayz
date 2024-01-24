@@ -1,4 +1,7 @@
-use crate::{mesh::MeshMaterialBindGroup, COLOR_BUFFER_FORMAT, SIZE, WORKGROUP_SIZE};
+use crate::{
+    mesh::{MeshMaterialBindGroup, MeshMaterialBindGroupLayout},
+    COLOR_BUFFER_FORMAT, SIZE, WORKGROUP_SIZE,
+};
 use bevy::{
     ecs::query::WorldQuery,
     prelude::*,
@@ -16,71 +19,80 @@ pub struct RaytracerBindGroup {
     pub rt_bind_group: BindGroup,
 }
 
+#[derive(Resource, Deref, DerefMut)]
+pub struct RaytracerBindGroupLayout(BindGroupLayout);
+impl FromWorld for RaytracerBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        let render_device = world.resource::<RenderDevice>();
+        let layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("raytracer_compute_bind_group_layout"),
+            entries: &[
+                // Output
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: COLOR_BUFFER_FORMAT,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                // Scene Data
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Objects Data
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        Self(layout)
+    }
+}
+
 #[derive(Resource)]
 pub struct RaytracerPipeline {
-    pub rt_bind_group_layout: BindGroupLayout,
     rt_pipeline_id: CachedComputePipelineId,
 }
 
 impl FromWorld for RaytracerPipeline {
     fn from_world(world: &mut World) -> Self {
-        let render_device = world.resource::<RenderDevice>();
-        let rt_bind_group_layout =
-            render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("raytracer_compute_bind_group_layout"),
-                entries: &[
-                    // Output
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: COLOR_BUFFER_FORMAT,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                    // Scene Data
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    // Objects Data
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
         let rt_shader = world
             .resource::<AssetServer>()
             .load("shaders/raytracer.wgsl");
         let pipeline_cache = world.resource::<PipelineCache>();
+        let rt_bind_group_layout = world.resource::<RaytracerBindGroupLayout>();
+        let mesh_material_layout = world.resource::<MeshMaterialBindGroupLayout>();
         let rt_pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-            label: None,
-            layout: vec![rt_bind_group_layout.clone()],
+            label: Some(Cow::Borrowed("rt_compute_pipeline")),
+            layout: vec![
+                (*rt_bind_group_layout).clone(),
+                (*mesh_material_layout).clone(),
+            ],
             push_constant_ranges: Vec::new(),
             shader: rt_shader,
             shader_defs: vec![],
             entry_point: Cow::from("main"),
         });
 
-        Self {
-            rt_bind_group_layout,
-            rt_pipeline_id,
-        }
+        Self { rt_pipeline_id }
     }
 }
 

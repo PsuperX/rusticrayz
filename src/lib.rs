@@ -9,8 +9,8 @@ use bevy::{
     },
 };
 use instance::InstancePlugin;
-use mesh::MeshPlugin;
-use raytracer::{RaytracerNode, RaytracerPipeline};
+use mesh::{MeshMaterialBindGroupLayout, MeshPlugin};
+use raytracer::{RaytracerBindGroupLayout, RaytracerNode, RaytracerPipeline};
 use screen::{ScreenNode, ScreenPipeline};
 use std::mem;
 
@@ -71,19 +71,20 @@ impl Plugin for RaytracerPlugin {
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
-        render_app.init_resource::<RaytracerPipeline>();
-        render_app.init_resource::<ScreenPipeline>();
+        render_app
+            .init_resource::<MeshMaterialBindGroupLayout>()
+            .init_resource::<RaytracerBindGroupLayout>()
+            .init_resource::<RaytracerPipeline>()
+            .init_resource::<ScreenPipeline>();
     }
 }
 
 fn prepare_bind_group(
     mut commands: Commands,
-    rt_pipeline: Res<RaytracerPipeline>,
     screen_pipeline: Res<ScreenPipeline>,
     render_device: Res<RenderDevice>,
+    rt_bind_group_layout: Res<RaytracerBindGroupLayout>,
 ) {
-    info!("prepare bind group");
-
     // TODO: maybe color_buffer should be a resource?
     let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
         create_assets(&render_device, RENDER_SCALE);
@@ -92,7 +93,7 @@ fn prepare_bind_group(
     // TODO: i dont think bindgroups should be created every frame D:
     let rt_bind_group = render_device.create_bind_group(
         Some("raytracer_rt_bind_group"),
-        &rt_pipeline.rt_bind_group_layout,
+        &rt_bind_group_layout,
         &[
             wgpu::BindGroupEntry {
                 binding: 0,

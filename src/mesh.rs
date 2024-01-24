@@ -36,8 +36,7 @@ impl Plugin for MeshPlugin {
         let render_app = app.sub_app_mut(RenderApp);
         render_app
             .init_resource::<GpuMeshes>()
-            .init_resource::<MeshRenderAssets>()
-            .init_resource::<MeshMaterialBindGroupLayout>();
+            .init_resource::<MeshRenderAssets>();
     }
 }
 
@@ -158,7 +157,7 @@ fn prepare_mesh_assets(
 }
 
 #[derive(Resource, Deref, DerefMut)]
-pub struct MeshMaterialBindGroupLayout(pub BindGroupLayout);
+pub struct MeshMaterialBindGroupLayout(BindGroupLayout);
 impl FromWorld for MeshMaterialBindGroupLayout {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();

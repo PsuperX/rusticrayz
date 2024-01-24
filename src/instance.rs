@@ -17,6 +17,8 @@ use std::marker::PhantomData;
 pub struct InstancePlugin;
 impl Plugin for InstancePlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(GenericInstancePlugin::<StandardMaterial>::default());
+
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedInstances>()
@@ -37,7 +39,7 @@ where
             PostUpdate,
             instance_event_system::<M>
                 .after(TransformSystem::TransformPropagate)
-                .after(VisibilitySystems::VisibilityPropagate)
+                .after(VisibilitySystems::CheckVisibility)
                 .after(VisibilitySystems::CalculateBounds),
         );
 
@@ -69,8 +71,8 @@ impl InstanceRenderAssets {
 
 #[derive(Event)]
 pub enum InstanceEvent<M: Into<StandardMaterial> + Asset> {
-    Created(Entity, Handle<Mesh>, Handle<M>, Visibility),
-    Modified(Entity, Handle<Mesh>, Handle<M>, Visibility),
+    Created(Entity, Handle<Mesh>, Handle<M>, ViewVisibility),
+    Modified(Entity, Handle<Mesh>, Handle<M>, ViewVisibility),
     Removed(Entity),
 }
 
@@ -80,16 +82,16 @@ fn instance_event_system<M: Into<StandardMaterial> + Asset>(
     mut removed: RemovedComponents<Handle<Mesh>>,
     mut set: ParamSet<(
         Query<
-            (Entity, &Handle<Mesh>, &Handle<M>, &Visibility),
+            (Entity, &Handle<Mesh>, &Handle<M>, &ViewVisibility),
             Or<(Added<Handle<Mesh>>, Added<Handle<M>>)>,
         >,
         Query<
-            (Entity, &Handle<Mesh>, &Handle<M>, &Visibility),
+            (Entity, &Handle<Mesh>, &Handle<M>, &ViewVisibility),
             Or<(
                 Changed<GlobalTransform>,
                 Changed<Handle<Mesh>>,
                 Changed<Handle<M>>,
-                Changed<Visibility>,
+                Changed<ViewVisibility>,
             )>,
         >,
     )>,
@@ -105,6 +107,7 @@ fn instance_event_system<M: Into<StandardMaterial> + Asset>(
             *visibility,
         ));
     }
+    // TODO: ViewVisibility is marked as changed every frame, even when they do not change
     for (entity, mesh, material, visibility) in &set.p1() {
         events.send(InstanceEvent::Modified(
             entity,
@@ -124,7 +127,7 @@ pub struct ExtractedInstances {
         GlobalTransform,
         Handle<Mesh>,
         UntypedHandle,
-        Visibility,
+        ViewVisibility,
     )>,
     removed: Vec<Entity>,
 }
@@ -160,7 +163,7 @@ fn extract_instances<M: Into<StandardMaterial> + Asset>(
     extracted_instances.removed.append(&mut removed);
 }
 
-type Instances = BTreeMap<Entity, (GpuInstance, Visibility)>;
+type Instances = BTreeMap<Entity, (GpuInstance, ViewVisibility)>;
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_instances(
@@ -237,7 +240,7 @@ fn prepare_instances(
         .append(&mut prepare_next_frame);
 
     if instance_changed || meshes.is_changed() {
-        collection.retain(|_, (_, visibility)| Visibility::Visible == *visibility);
+        collection.retain(|_, (_, visibility)| visibility.get());
 
         let instances = collection
             .values()
