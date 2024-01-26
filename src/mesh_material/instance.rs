@@ -1,24 +1,29 @@
-use crate::mesh::{GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer};
-use bevy::math::Vec3A;
-use bevy::prelude::*;
-use bevy::render::primitives::Aabb;
-use bevy::render::renderer::{RenderDevice, RenderQueue};
-use bevy::render::view::VisibilitySystems;
-use bevy::render::{render_resource::*, RenderApp};
-use bevy::render::{Extract, Render};
-use bevy::transform::TransformSystem;
-use bvh::aabb::{Bounded, AABB};
-use bvh::bounding_hierarchy::BHShape;
-use bvh::bvh::BVH;
+use bevy::{
+    math::Vec3A,
+    prelude::*,
+    render::{
+        primitives::Aabb,
+        render_resource::*,
+        renderer::{RenderDevice, RenderQueue},
+        view::VisibilitySystems,
+        Extract, Render, RenderApp,
+    },
+    transform::TransformSystem,
+};
+use bvh::{
+    aabb::{Bounded, AABB},
+    bounding_hierarchy::BHShape,
+    bvh::BVH,
+};
 use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
+use super::{mesh::GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer};
+
 pub struct InstancePlugin;
 impl Plugin for InstancePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(GenericInstancePlugin::<StandardMaterial>::default());
-
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedInstances>()
@@ -58,7 +63,6 @@ pub struct InstanceRenderAssets {
 impl InstanceRenderAssets {
     pub fn set(&mut self, instances: Vec<GpuInstance>, instance_nodes: Vec<GpuNode>) {
         self.instance_buffer.get_mut().data = instances;
-
         self.instance_node_buffer.get_mut().count = instance_nodes.len() as u32;
         self.instance_node_buffer.get_mut().data = instance_nodes;
     }
@@ -137,15 +141,12 @@ fn extract_instances<M: Into<StandardMaterial> + Asset>(
     query: Extract<Query<(&Aabb, &GlobalTransform)>>,
     mut extracted_instances: ResMut<ExtractedInstances>,
 ) {
-    let mut extracted = vec![];
-    let mut removed = vec![];
-
     for event in events.read() {
         match event {
             InstanceEvent::Created(entity, mesh, material, visibility)
             | InstanceEvent::Modified(entity, mesh, material, visibility) => {
                 if let Ok((aabb, transform)) = query.get(*entity) {
-                    extracted.push((
+                    extracted_instances.extracted.push((
                         *entity,
                         *aabb,
                         *transform,
@@ -155,12 +156,9 @@ fn extract_instances<M: Into<StandardMaterial> + Asset>(
                     ));
                 }
             }
-            InstanceEvent::Removed(entity) => removed.push(*entity),
+            InstanceEvent::Removed(entity) => extracted_instances.removed.push(*entity),
         }
     }
-
-    extracted_instances.extracted.append(&mut extracted);
-    extracted_instances.removed.append(&mut removed);
 }
 
 type Instances = BTreeMap<Entity, (GpuInstance, ViewVisibility)>;
@@ -215,8 +213,6 @@ fn prepare_instances(
         min += center;
         max += center;
 
-        // Note that the `GpuInstance` is partially constructed:
-        // since node index is unknown at this point.
         let min = Vec3::from(min);
         let max = Vec3::from(max);
         collection.insert(
@@ -259,17 +255,19 @@ fn prepare_instances(
             bvh.flatten_custom(&GpuNode::pack)
         };
 
-        // TODO: I dont think this is necessary
-        for ((instance, _), value) in collection.values_mut().zip_eq(instances_shapes.iter()) {
-            // Assign the computed BVH node index, and mesh/material indices.
-            *instance = value.0.clone();
-        }
-
         render_assets.set(instances, instance_nodes);
         render_assets.write_buffer(&render_device, &render_queue);
     }
 }
 
+/// Container for primitive data
+#[derive(Default, ShaderType)]
+pub struct GpuInstanceBuffer {
+    #[size(runtime)]
+    pub data: Vec<GpuInstance>,
+}
+
+/// This must match the Vertex definition on the shader
 #[derive(Debug, Default, Clone, ShaderType)]
 pub struct GpuInstance {
     pub min: Vec3,
@@ -280,7 +278,7 @@ pub struct GpuInstance {
     pub mesh: GpuMeshIndex,
 }
 
-// Used to create BVH
+/// Used to create BVH
 struct GpuInstanceShape(GpuInstance, usize);
 
 impl Bounded for GpuInstanceShape {
@@ -300,10 +298,4 @@ impl BHShape for GpuInstanceShape {
     fn bh_node_index(&self) -> usize {
         self.1
     }
-}
-
-#[derive(Default, ShaderType)]
-pub struct GpuInstanceBuffer {
-    #[size(runtime)]
-    pub data: Vec<GpuInstance>,
 }

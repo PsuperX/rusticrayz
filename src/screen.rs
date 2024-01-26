@@ -26,21 +26,21 @@ impl FromWorld for ScreenPipeline {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
         let screen_bind_group_layout =
-            render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("raytracer_screen_layout"),
                 entries: &[
-                    wgpu::BindGroupLayoutEntry {
+                    BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
+                    BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
                         count: None,
@@ -60,27 +60,27 @@ impl FromWorld for ScreenPipeline {
                 entry_point: Cow::from("vs_main"),
                 buffers: vec![],
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                polygon_mode: PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState {
+            multisample: MultisampleState {
                 count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
                 entry_point: Cow::from("fs_main"),
-                targets: vec![Some(wgpu::ColorTargetState {
+                targets: vec![Some(ColorTargetState {
                     format: FORMAT,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
                 })],
                 shader: screen_shader,
                 shader_defs: vec![],
@@ -118,11 +118,11 @@ impl render_graph::ViewNode for ScreenNode {
                     .command_encoder()
                     .begin_render_pass(&RenderPassDescriptor {
                         label: Some("Raytracer render pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        color_attachments: &[Some(RenderPassColorAttachment {
                             view: view_query.out_texture(),
                             resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
+                            ops: Operations {
+                                load: LoadOp::Load,
                                 store: true,
                             },
                         })],
@@ -158,27 +158,27 @@ impl SpecializedRenderPipeline for ScreenPipeline {
                 entry_point: Cow::from("vs_main"),
                 buffers: vec![],
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                polygon_mode: PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState {
+            multisample: MultisampleState {
                 count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(FragmentState {
                 entry_point: Cow::from("fs_main"),
-                targets: vec![Some(wgpu::ColorTargetState {
+                targets: vec![Some(ColorTargetState {
                     format: FORMAT,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
                 })],
                 shader: Handle::default(),
                 shader_defs: vec![],

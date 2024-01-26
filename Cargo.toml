@@ -6,11 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tracing = "0.1"
-wgpu = "0.17"
-glam = { version = "0.25", features = ["bytemuck", "rand"] }
-bytemuck = "1.14"
-rand = "0.8"
 itertools = "0.12"
 bvh = "0.7"
 

@@ -1,5 +1,5 @@
 use crate::{
-    mesh::{MeshMaterialBindGroup, MeshMaterialBindGroupLayout},
+    mesh_material::{MeshMaterialBindGroup, MeshMaterialBindGroupLayout},
     COLOR_BUFFER_FORMAT, SIZE, WORKGROUP_SIZE,
 };
 use bevy::{
@@ -28,33 +28,33 @@ impl FromWorld for RaytracerBindGroupLayout {
             label: Some("raytracer_compute_bind_group_layout"),
             entries: &[
                 // Output
-                wgpu::BindGroupLayoutEntry {
+                BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::WriteOnly,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::StorageTexture {
+                        access: StorageTextureAccess::WriteOnly,
                         format: COLOR_BUFFER_FORMAT,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: TextureViewDimension::D2,
                     },
                     count: None,
                 },
                 // Scene Data
-                wgpu::BindGroupLayoutEntry {
+                BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
                 },
                 // Objects Data
-                wgpu::BindGroupLayoutEntry {
+                BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },

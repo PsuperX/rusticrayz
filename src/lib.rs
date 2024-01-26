@@ -8,14 +8,12 @@ use bevy::{
         Render, RenderApp, RenderSet,
     },
 };
-use instance::InstancePlugin;
-use mesh::{MeshMaterialBindGroupLayout, MeshPlugin};
+use mesh_material::{MeshMaterialBindGroupLayout, MeshMaterialPlugin};
 use raytracer::{RaytracerBindGroupLayout, RaytracerNode, RaytracerPipeline};
 use screen::{ScreenNode, ScreenPipeline};
 use std::mem;
 
-mod instance;
-mod mesh;
+mod mesh_material;
 mod raytracer;
 mod screen;
 
@@ -35,15 +33,15 @@ pub mod graph {
 const SIZE: (u32, u32) = (1280, 720);
 const WORKGROUP_SIZE: u32 = 8;
 
-const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
-const COLOR_BUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+const FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
+const COLOR_BUFFER_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 const MAX_TRIANGLE_COUNT: u64 = 32;
 const RENDER_SCALE: f32 = 1.0;
 
 pub struct RaytracerPlugin;
 impl Plugin for RaytracerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((MeshPlugin, InstancePlugin));
+        app.add_plugins(MeshMaterialPlugin);
 
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
@@ -89,21 +87,21 @@ fn prepare_bind_group(
     let (color_buffer, sampler, scene_data_buffer, objects_buffer) =
         create_assets(&render_device, RENDER_SCALE);
 
-    let color_buffer_view = color_buffer.create_view(&wgpu::TextureViewDescriptor::default());
+    let color_buffer_view = color_buffer.create_view(&TextureViewDescriptor::default());
     // TODO: i dont think bindgroups should be created every frame D:
     let rt_bind_group = render_device.create_bind_group(
         Some("raytracer_rt_bind_group"),
         &rt_bind_group_layout,
         &[
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(&color_buffer_view),
+                resource: BindingResource::TextureView(&color_buffer_view),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 1,
                 resource: scene_data_buffer.as_entire_binding(),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 2,
                 resource: objects_buffer.as_entire_binding(),
             },
@@ -113,13 +111,13 @@ fn prepare_bind_group(
         Some("raytracer_screen_bind_group"),
         &screen_pipeline.screen_bind_group_layout,
         &[
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Sampler(&sampler),
+                resource: BindingResource::Sampler(&sampler),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&color_buffer_view),
+                resource: BindingResource::TextureView(&color_buffer_view),
             },
         ],
     );
@@ -131,28 +129,28 @@ fn prepare_bind_group(
 fn create_assets(device: &RenderDevice, render_scale: f32) -> (Texture, Sampler, Buffer, Buffer) {
     let color_buffer = create_color_buffer(device, render_scale);
 
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+    let sampler = device.create_sampler(&SamplerDescriptor {
         label: Some("Raytracer screen sampler"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
+        address_mode_u: AddressMode::ClampToEdge,
+        address_mode_v: AddressMode::ClampToEdge,
+        address_mode_w: AddressMode::ClampToEdge,
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Nearest,
+        mipmap_filter: FilterMode::Nearest,
         ..Default::default()
     });
 
-    let scene_data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+    let scene_data_buffer = device.create_buffer(&BufferDescriptor {
         label: Some("Scene data buffer"),
         size: mem::size_of::<SceneData>() as u64,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
 
-    let objects_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+    let objects_buffer = device.create_buffer(&BufferDescriptor {
         label: Some("Objects data buffer"),
         size: MAX_TRIANGLE_COUNT * mem::size_of::<Triangle>() as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
 
@@ -160,24 +158,23 @@ fn create_assets(device: &RenderDevice, render_scale: f32) -> (Texture, Sampler,
 }
 
 fn create_color_buffer(device: &RenderDevice, scale: f32) -> Texture {
-    device.create_texture(&wgpu::TextureDescriptor {
+    device.create_texture(&TextureDescriptor {
         label: Some("raytracer_color_buffer"),
-        size: wgpu::Extent3d {
+        size: Extent3d {
             width: (SIZE.0 as f32 * scale) as u32,
             height: (SIZE.1 as f32 * scale) as u32,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: TextureDimension::D2,
         format: COLOR_BUFFER_FORMAT,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::STORAGE_BINDING,
         view_formats: &[],
     })
 }
 
-#[repr(C, align(16))]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, ShaderType)]
 struct SceneData {
     camera: CameraUniform,
     pixel00_loc: Vec3,
@@ -192,8 +189,7 @@ struct SceneData {
     _padding2: [u32; 2],
 }
 
-#[repr(C, align(16))]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, ShaderType)]
 pub struct Triangle {
     corner_a: Vec3,
     _padding0: u32,
@@ -213,8 +209,7 @@ pub struct Triangle {
     _padding6: u32,
 }
 
-#[repr(C, align(16))]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, ShaderType)]
 pub struct CameraUniform {
     pos: Vec3,
     _padding0: u32,
