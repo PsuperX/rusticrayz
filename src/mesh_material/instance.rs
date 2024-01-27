@@ -1,3 +1,4 @@
+use super::{mesh::prepare_mesh_assets, GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer};
 use bevy::{
     math::Vec3A,
     prelude::*,
@@ -19,8 +20,6 @@ use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
-use super::{mesh::GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer};
-
 pub struct InstancePlugin;
 impl Plugin for InstancePlugin {
     fn build(&self, app: &mut App) {
@@ -28,7 +27,7 @@ impl Plugin for InstancePlugin {
             render_app
                 .init_resource::<ExtractedInstances>()
                 .init_resource::<InstanceRenderAssets>()
-                .add_systems(Render, prepare_instances);
+                .add_systems(Render, prepare_instances.after(prepare_mesh_assets));
         }
     }
 }
@@ -163,7 +162,6 @@ fn extract_instances<M: Into<StandardMaterial> + Asset>(
 
 type Instances = BTreeMap<Entity, (GpuInstance, ViewVisibility)>;
 
-#[allow(clippy::too_many_arguments)]
 fn prepare_instances(
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
@@ -186,6 +184,8 @@ fn prepare_instances(
             |(entity, aabb, transform, mesh, material, visibility)| match meshes.get(&mesh) {
                 Some(mesh) => Some((entity, aabb, transform, mesh, material, visibility)),
                 _ => {
+                    // TODO: not sure this can happen
+                    error!("the mesh {:?} was not ready! how did this happen??", mesh);
                     prepare_next_frame.push((entity, aabb, transform, mesh, material, visibility));
                     None
                 }
@@ -204,6 +204,7 @@ fn prepare_instances(
             })
             .collect_vec();
 
+        // TODO: i think bevy::render::view::calculate_bounds already does this
         let mut min = Vec3A::ZERO;
         let mut max = Vec3A::ZERO;
         for vertex in vertices {

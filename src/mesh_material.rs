@@ -1,6 +1,6 @@
 use self::{
     instance::{GenericInstancePlugin, GpuInstance, InstancePlugin, InstanceRenderAssets},
-    mesh::{GpuMeshIndex, GpuPrimitiveBuffer, GpuVertexBuffer, MeshPlugin, MeshRenderAssets},
+    mesh::{GpuPrimitiveBuffer, GpuVertexBuffer, MeshPlugin, MeshRenderAssets},
 };
 use bevy::{
     prelude::*,
@@ -19,13 +19,22 @@ impl Plugin for MeshMaterialPlugin {
             .add_plugins(GenericInstancePlugin::<StandardMaterial>::default());
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
-            render_app.add_systems(Render, queue_mesh_bind_group.in_set(RenderSet::QueueMeshes));
+            render_app.init_resource::<GpuMeshes>().add_systems(
+                Render,
+                queue_mesh_material_bind_group.in_set(RenderSet::QueueMeshes),
+            );
+        }
+    }
+
+    fn finish(&self, app: &mut App) {
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app.init_resource::<MeshMaterialBindGroupLayout>();
         }
     }
 }
 
-#[derive(Resource, Deref, DerefMut)]
-pub struct MeshMaterialBindGroupLayout(BindGroupLayout);
+#[derive(Resource, Clone, Deref, DerefMut)]
+pub struct MeshMaterialBindGroupLayout(pub BindGroupLayout);
 impl FromWorld for MeshMaterialBindGroupLayout {
     fn from_world(world: &mut World) -> Self {
         let render_device = world.resource::<RenderDevice>();
@@ -99,7 +108,7 @@ pub struct MeshMaterialBindGroup {
     pub mesh_material: BindGroup,
 }
 
-fn queue_mesh_bind_group(
+fn queue_mesh_material_bind_group(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
     meshes: Res<MeshRenderAssets>,
@@ -164,6 +173,14 @@ pub enum PrepareMeshError {
 /// Holds all GPU representatives of mesh assets.
 #[derive(Default, Resource, Deref, DerefMut)]
 pub struct GpuMeshes(HashMap<Handle<Mesh>, GpuMeshIndex>);
+
+/// Offsets (and length for nodes) of the mesh in the universal buffer.
+#[derive(Debug, Default, Clone, Copy, ShaderType)]
+pub struct GpuMeshIndex {
+    pub vertex: u32,
+    pub primitive: u32,
+    pub node: UVec2,
+}
 
 /// Container for nodes of a bvh
 #[derive(Default, ShaderType)]

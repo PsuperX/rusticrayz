@@ -1,17 +1,3 @@
-struct Triangle {
-    corner_a: vec3<f32>,
-    corner_b: vec3<f32>,
-    corner_c: vec3<f32>,
-    normal_a: vec3<f32>,
-    normal_b: vec3<f32>,
-    normal_c: vec3<f32>,
-    color: vec3<f32>,
-}
-
-struct ObjectData {
-    triangles: array<Triangle>,
-}
-
 struct Ray {
     dir: vec3<f32>,
     inv_dir: vec3<f32>,
@@ -21,21 +7,6 @@ struct Ray {
 struct Aabb {
     min: vec3<f32>,
     max: vec3<f32>,
-}
-
-struct SceneData {
-    camera_pos: vec3<f32>,
-    camera_forwards: vec3<f32>,
-    camera_right: vec3<f32>,
-    camera_up: vec3<f32>,
-
-    pixel00_loc: vec3<f32>,
-    pixel_delta_u: vec3<f32>,
-    pixel_delta_v: vec3<f32>,
-
-    maxBounces: i32,
-    samples_per_pixel: i32,
-    primitiveCount: i32,
 }
 
 struct HitRecord {
@@ -103,8 +74,6 @@ struct Nodes {
 }
 
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(1) var<uniform> scene: SceneData;
-@group(0) @binding(2) var<storage, read> objects: ObjectData;
 
 @group(1) @binding(0) var<storage, read> vertex_buffer: array<Vertex>;
 @group(1) @binding(1) var<storage, read> primitive_buffer: array<Primitive>;
@@ -175,7 +144,8 @@ fn getRay(x: i32, y: i32, pixel00_loc: vec3<f32>, pixel_delta_u: vec3<f32>, pixe
 fn pixel_sample_square() -> vec3<f32> {
     let px = -0.5 + rand();
     let py = -0.5 + rand();
-    return (px * scene.pixel_delta_u) + (py * scene.pixel_delta_v);
+    // return (px * scene.pixel_delta_u) + (py * scene.pixel_delta_v);
+    return vec3<f32>(0.0, 0.0, 0.0);
 }
 
 fn rayColor(ray: Ray) -> vec3<f32> {

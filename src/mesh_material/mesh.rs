@@ -1,4 +1,4 @@
-use super::{GpuMeshes, GpuNode, GpuNodeBuffer, PrepareMeshError};
+use super::{GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer, PrepareMeshError};
 use bevy::{
     prelude::*,
     render::{
@@ -31,10 +31,9 @@ impl Plugin for MeshPlugin {
     }
 
     fn finish(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(RenderApp);
-        render_app
-            .init_resource::<GpuMeshes>()
-            .init_resource::<MeshRenderAssets>();
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app.init_resource::<MeshRenderAssets>();
+        }
     }
 }
 
@@ -92,7 +91,7 @@ fn extract_mesh_assets(
         }
     }
 
-    let mut extracted = Vec::new();
+    let mut extracted = vec![];
     for handle in changed_assets.drain() {
         if let Some(mesh) = assets.get(&handle) {
             extracted.push((handle, mesh.clone()));
@@ -102,7 +101,7 @@ fn extract_mesh_assets(
     commands.insert_resource(ExtractedMeshes { extracted, removed });
 }
 
-fn prepare_mesh_assets(
+pub fn prepare_mesh_assets(
     mut extracted_assets: ResMut<ExtractedMeshes>,
     mut assets: Local<BTreeMap<Handle<Mesh>, GpuMesh>>,
     mut meshes: ResMut<GpuMeshes>,
@@ -152,14 +151,6 @@ fn prepare_mesh_assets(
     }
     render_assets.set(vertices, primitives, nodes);
     render_assets.write_buffer(&render_device, &render_queue);
-}
-
-/// Offsets (and length for nodes) of the mesh in the universal buffer.
-#[derive(Debug, Default, Clone, Copy, ShaderType)]
-pub struct GpuMeshIndex {
-    pub vertex: u32,
-    pub primitive: u32,
-    pub node: UVec2,
 }
 
 #[derive(Default, Clone)]
