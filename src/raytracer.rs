@@ -1,5 +1,6 @@
 use crate::{
     mesh_material::{MeshMaterialBindGroup, MeshMaterialBindGroupLayout},
+    view::{ViewBindGroup, ViewBindGroupLayout},
     ColorBuffer, RtSettings, COLOR_BUFFER_FORMAT, RT_SHADER_HANDLE, SIZE, WORKGROUP_SIZE,
 };
 use bevy::{
@@ -10,7 +11,7 @@ use bevy::{
         render_graph,
         render_resource::*,
         renderer::{RenderContext, RenderDevice},
-        view::ViewTarget,
+        view::{ViewTarget, ViewUniformOffset},
         Render, RenderApp, RenderSet,
     },
 };
@@ -85,14 +86,17 @@ fn prepare_color_buffer_bind_group(
 pub struct RaytracerPipelineLayout {
     mesh_material_layout: BindGroupLayout,
     color_buffer_layout: BindGroupLayout,
+    view_buffer_layout: BindGroupLayout,
 }
 impl FromWorld for RaytracerPipelineLayout {
     fn from_world(world: &mut World) -> Self {
         let mesh_material_layout = world.resource::<MeshMaterialBindGroupLayout>();
         let color_buffer_layout = world.resource::<ColorBufferBindGroupLayout>();
+        let view_buffer_layout = world.resource::<ViewBindGroupLayout>();
         Self {
             mesh_material_layout: mesh_material_layout.0.clone(),
             color_buffer_layout: color_buffer_layout.0.clone(),
+            view_buffer_layout: view_buffer_layout.0.clone(),
         }
     }
 }
@@ -111,6 +115,7 @@ impl SpecializedComputePipeline for RaytracerPipelineLayout {
             layout: vec![
                 self.color_buffer_layout.clone(),
                 self.mesh_material_layout.clone(),
+                self.view_buffer_layout.clone(),
             ],
             push_constant_ranges: vec![],
             shader: RT_SHADER_HANDLE.clone(),
@@ -141,17 +146,18 @@ fn queue_raytracer_pipeline(
 pub struct RaytracerNode;
 impl render_graph::ViewNode for RaytracerNode {
     // ViewTargets are cameras
-    type ViewQuery = &'static ViewTarget;
+    type ViewQuery = (&'static ViewTarget, &'static ViewUniformOffset);
 
     fn run(
         &self,
         _graph: &mut render_graph::RenderGraphContext,
         render_context: &mut RenderContext,
-        _view_query: <Self::ViewQuery as WorldQuery>::Item<'_>,
+        (_target, view_uniform_offset): <Self::ViewQuery as WorldQuery>::Item<'_>,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
         let color_buffer_bind_group = world.resource::<ColorBufferBindGroup>();
         let mesh_material_bind_group = world.resource::<MeshMaterialBindGroup>();
+        let view_bind_group = world.resource::<ViewBindGroup>();
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<RaytracerPipeline>();
 
@@ -162,6 +168,7 @@ impl render_graph::ViewNode for RaytracerNode {
             compute_pass.set_pipeline(rt_pipeline);
             compute_pass.set_bind_group(0, color_buffer_bind_group, &[]);
             compute_pass.set_bind_group(1, &mesh_material_bind_group.mesh_material, &[]);
+            compute_pass.set_bind_group(2, view_bind_group, &[view_uniform_offset.offset]);
             compute_pass.dispatch_workgroups(SIZE.0 / WORKGROUP_SIZE, SIZE.1 / WORKGROUP_SIZE, 1);
         }
 

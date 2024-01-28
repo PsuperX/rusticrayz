@@ -11,10 +11,12 @@ use bevy::{
 use mesh_material::MeshMaterialPlugin;
 use raytracer::{RaytracerNode, RaytracerPipelinePlugin};
 use screen::{ScreenNode, ScreenPlugin};
+use view::ViewPlugin;
 
 mod mesh_material;
 mod raytracer;
 mod screen;
+mod view;
 
 /// Render graph constants
 pub mod graph {
@@ -59,7 +61,12 @@ impl Plugin for RaytracerPlugin {
         app.init_resource::<RtSettings>()
             .add_plugins(ExtractResourcePlugin::<RtSettings>::default())
             .add_plugins(ExtractResourcePlugin::<ColorBuffer>::default())
-            .add_plugins((MeshMaterialPlugin, RaytracerPipelinePlugin, ScreenPlugin))
+            .add_plugins((
+                MeshMaterialPlugin,
+                ViewPlugin,
+                RaytracerPipelinePlugin,
+                ScreenPlugin,
+            ))
             .add_systems(Startup, create_color_buffer);
 
         let Ok(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -100,6 +107,7 @@ impl FromWorld for RtSettings {
 #[derive(Resource, Clone, ExtractResource, Deref, DerefMut)]
 pub struct ColorBuffer(Handle<Image>);
 
+// TODO: every camera should have its own color buffer... i think
 fn create_color_buffer(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,

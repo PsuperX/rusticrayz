@@ -1,3 +1,5 @@
+#import bevy_render::view::View
+
 struct Ray {
     dir: vec3<f32>,
     inv_dir: vec3<f32>,
@@ -80,6 +82,8 @@ struct Nodes {
 @group(1) @binding(2) var<storage, read> primitive_node_buffer: Nodes;
 @group(1) @binding(3) var<storage, read> instance_buffer: array<Instance>;
 @group(1) @binding(4) var<storage, read> instance_node_buffer: Nodes;
+
+@group(2) @binding(0) var<uniform> view: View;
 
 const F32_MAX = 3.4028235e38;
 const U32_MAX: u32 = 0xFFFFFFFFu;
