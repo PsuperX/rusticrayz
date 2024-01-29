@@ -75,15 +75,31 @@ struct Nodes {
     data: array<Node>,
 }
 
+struct Material {
+    base_color: vec4<f32>,
+    base_color_texture: u32,
+    emissive: vec4<f32>,
+    emissive_texture: u32,
+    perceptual_roughness: f32,
+    metallic: f32,
+    metallic_roughness_texture: u32,
+    reflectance: f32,
+    normal_map_texture: u32,
+}
+
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
 
 @group(1) @binding(0) var<storage, read> vertex_buffer: array<Vertex>;
 @group(1) @binding(1) var<storage, read> primitive_buffer: array<Primitive>;
 @group(1) @binding(2) var<storage, read> primitive_node_buffer: Nodes;
-@group(1) @binding(3) var<storage, read> instance_buffer: array<Instance>;
-@group(1) @binding(4) var<storage, read> instance_node_buffer: Nodes;
+@group(1) @binding(3) var<storage, read> material_buffer: array<Material>;
+@group(1) @binding(4) var<storage, read> instance_buffer: array<Instance>;
+@group(1) @binding(5) var<storage, read> instance_node_buffer: Nodes;
 
-@group(2) @binding(0) var<uniform> view: View;
+@group(2) @binding(0) var textures: binding_array<texture_2d<f32>>;
+@group(2) @binding(1) var samplers: binding_array<sampler>;
+
+@group(3) @binding(0) var<uniform> view: View;
 
 const F32_MAX: f32 = 3.4028235e38;
 const U32_MAX: u32 = 0xFFFFFFFFu;
@@ -116,13 +132,12 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
 }
 
 fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
-    let pixelCenter = vec2<f32>(screen_pos) + vec2<f32>(0.5);
+    let pixelCenter = vec2<f32>(screen_pos) + vec2<f32>(rand() - 0.5, rand() - 0.5);
     let inUV = pixelCenter / vec2<f32>(screen_size);
     let d = inUV * 2.0 - 1.0;
 
     let origin = view.view * vec4<f32>(0.0, 0.0, 0.0, 1.0);
     let pixel_center = view.inverse_projection * vec4<f32>(d.x, -d.y, 1.0, 1.0);
-    // TODO: use pixel_sample_square
     let direction = view.view * vec4<f32>(normalize(pixel_center.xyz), 0.0);
 
     var ray: Ray;
@@ -132,17 +147,18 @@ fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
     return ray;
 }
 
-fn pixel_sample_square() -> vec3<f32> {
-    let px = -0.5 + rand();
-    let py = -0.5 + rand();
-    // return (px * scene.pixel_delta_u) + (py * scene.pixel_delta_v);
-    return vec3<f32>(0.0, 0.0, 0.0);
-}
-
 fn ray_color(ray: Ray) -> vec3<f32> {
     var new_render_state = traverse_instances(ray, 0.0, F32_MAX);
     if new_render_state.instance_index != U32_MAX {
-        return vec3<f32>(new_render_state.intersection.uv, 0.0);
+        let instance_idx = new_render_state.instance_index;
+        let material_idx = instance_buffer[instance_idx].material;
+
+        var base_color = material_buffer[material_idx].base_color;
+        let texture_idx = material_buffer[material_idx].base_color_texture;
+        if texture_idx != U32_MAX {
+            base_color *= textureSampleLevel(textures[texture_idx], samplers[texture_idx], new_render_state.intersection.uv, 0.0);
+        }
+        return base_color.xyz;
     }
 
     // Miss
