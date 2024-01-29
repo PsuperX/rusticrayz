@@ -1,4 +1,7 @@
-use bevy::{prelude::*, render::camera::CameraRenderGraph, window::WindowPlugin};
+use bevy::{
+    core_pipeline::core_3d, prelude::*, render::camera::CameraRenderGraph, window::WindowPlugin,
+};
+use bevy_flycam::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use rusticrayz::RaytracerPlugin;
 
@@ -15,9 +18,11 @@ fn main() {
                 ..default()
             }),
             RaytracerPlugin,
+            NoCameraPlayerPlugin,
         ))
         .add_plugins(WorldInspectorPlugin::new())
-        .add_systems(Startup, setup);
+        .add_systems(Startup, setup)
+        .add_systems(Update, switch_camera);
     // bevy_mod_debugdump::print_render_graph(&mut app);
     // bevy_mod_debugdump::print_schedule_graph(&mut app, Update);
     app.run();
@@ -39,7 +44,7 @@ fn setup(
     commands.spawn(PbrBundle {
         mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
         material: materials.add(Color::rgb_u8(124, 144, 255).into()),
-        // transform: Transform::from_xyz(0.0, 0.5, 0.0),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
         ..default()
     });
     // light
@@ -53,13 +58,39 @@ fn setup(
         ..default()
     });
     // camera
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-        camera_render_graph: CameraRenderGraph::new(rusticrayz::graph::NAME),
-        camera_3d: Camera3d {
-            // clear_color: Color::WHITE.into(),
+    commands.spawn((
+        Camera3dBundle {
+            // transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+            transform: Transform::from_xyz(0.0, 0.0, -9.0).looking_at(Vec3::ZERO, Vec3::Y),
+            camera_render_graph: CameraRenderGraph::new(rusticrayz::graph::NAME),
+            camera_3d: Camera3d {
+                // clear_color: Color::WHITE.into(),
+                ..default()
+            },
             ..default()
         },
-        ..default()
-    },));
+        FlyCam,
+    ));
+}
+
+fn switch_camera(
+    mut query: Query<(&mut Transform, &mut CameraRenderGraph)>,
+    keys: Res<Input<KeyCode>>,
+) {
+    for (mut pos, mut cam) in &mut query {
+        if keys.just_pressed(KeyCode::C) {
+            if **cam == "raytracer" {
+                info!("Switching to {}", core_3d::graph::NAME);
+                cam.set(core_3d::graph::NAME);
+            } else {
+                info!("Switching to {}", rusticrayz::graph::NAME);
+                cam.set(rusticrayz::graph::NAME);
+            }
+        }
+
+        if keys.just_pressed(KeyCode::R) {
+            info!("Resetting Camera");
+            *pos = Transform::from_xyz(0.0, 0.0, -9.0).looking_at(Vec3::ZERO, Vec3::Y);
+        }
+    }
 }

@@ -85,7 +85,7 @@ struct Nodes {
 
 @group(2) @binding(0) var<uniform> view: View;
 
-const F32_MAX = 3.4028235e38;
+const F32_MAX: f32 = 3.4028235e38;
 const U32_MAX: u32 = 0xFFFFFFFFu;
 const BVH_LEAF_FLAG: u32 = 0x80000000u;
 
@@ -103,45 +103,32 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
     seed = u32(screen_pos.x) + randi();
     randi();
 
-    // let pixel_center = scene.pixel00_loc + (f32(screen_pos.x) * scene.pixel_delta_u) + (f32(screen_pos.y) * scene.pixel_delta_v);
-    // let ray_direction = pixel_center - scene.camera_pos;
-    let pixel_center = vec3<f32>(-1.0, 0.6, 0.0) + (f32(screen_pos.x) * vec3<f32>(0.003, 0.0, 0.0)) + (f32(screen_pos.y) * vec3<f32>(0.0, -0.003, 0.0));
-    let ray_direction = pixel_center - vec3<f32>(0.0, 0.0, -9.0);
-
     var pixel_color: vec3<f32>;
+    // TODO: this
     let samples_per_pixel = 1;
     for (var i = 0; i < samples_per_pixel; i++) {
-        // let ray = getRay(screen_pos.x, screen_pos.y, scene.pixel00_loc, scene.pixel_delta_u, scene.pixel_delta_v, scene.camera_pos);
-        let ray = getRay(screen_pos.x, screen_pos.y, vec3<f32>(-1.0, 0.6, 0.0), vec3<f32>(0.003, 0.0, 0.0), vec3<f32>(0.0, -0.003, 0.0), vec3<f32>(0.0, 0.0, -9.0));
-        pixel_color += rayColor(ray);
+        let ray = get_ray(screen_pos, screen_size);
+        pixel_color += ray_color(ray);
     }
     pixel_color /= f32(samples_per_pixel);
-
-
-    /*
-    for (var i = 0; i < 12; i++) {
-        let ray = getRay(screen_pos.x, screen_pos.y, vec3<f32>(-1.0, 0.6, 0.0), vec3<f32>(0.003, 0.0, 0.0), vec3<f32>(0.0, -0.003, 0.0), vec3<f32>(0.0, 0.0, -9.0));
-        if intersectsTriangle(ray, primitive_buffer[i].vertices).distance > 0.0 {
-            pixel_color = vec3<f32>(1.0, 1.0, 0.0);
-        }
-    }
-    */
-
 
     textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
 
-fn getRay(x: i32, y: i32, pixel00_loc: vec3<f32>, pixel_delta_u: vec3<f32>, pixel_delta_v: vec3<f32>, center: vec3<f32>) -> Ray {
-    let pixel_center = pixel00_loc + (f32(x) * pixel_delta_u) + (f32(y) * pixel_delta_v);
-    let pixel_sample = pixel_center + pixel_sample_square();
+fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
+    let pixelCenter = vec2<f32>(screen_pos) + vec2<f32>(0.5);
+    let inUV = pixelCenter / vec2<f32>(screen_size);
+    let d = inUV * 2.0 - 1.0;
 
-    let ray_origin = center;
-    let ray_direction = pixel_sample - ray_origin;
+    let origin = view.view * vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    let pixel_center = view.inverse_projection * vec4<f32>(d.x, -d.y, 1.0, 1.0);
+    // TODO: use pixel_sample_square
+    let direction = view.view * vec4<f32>(normalize(pixel_center.xyz), 0.0);
 
     var ray: Ray;
-    ray.orig = ray_origin;
-    ray.dir = ray_direction;
-    ray.inv_dir = 1.0 / ray_direction;
+    ray.orig = vec3<f32>(origin.xyz);
+    ray.dir = vec3<f32>(direction.xyz);
+    ray.inv_dir = 1.0 / vec3<f32>(direction.xyz);
     return ray;
 }
 
@@ -152,8 +139,8 @@ fn pixel_sample_square() -> vec3<f32> {
     return vec3<f32>(0.0, 0.0, 0.0);
 }
 
-fn rayColor(ray: Ray) -> vec3<f32> {
-    var new_render_state = traverseInstances(ray, F32_MAX);
+fn ray_color(ray: Ray) -> vec3<f32> {
+    var new_render_state = traverse_instances(ray, 0.0, F32_MAX);
     if new_render_state.instance_index != U32_MAX {
         return vec3<f32>(1.0, 0.0, 1.0);
     }
@@ -164,7 +151,7 @@ fn rayColor(ray: Ray) -> vec3<f32> {
     return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 }
 
-fn traverseInstances(ray: Ray, max_distance: f32) -> Hit {
+fn traverse_instances(ray: Ray, early_distance: f32, max_distance: f32) -> Hit {
     var hit: Hit;
     hit.intersection.distance = max_distance;
     hit.instance_index = U32_MAX;
@@ -181,9 +168,17 @@ fn traverseInstances(ray: Ray, max_distance: f32) -> Hit {
             aabb.min = instance.min;
             aabb.max = instance.max;
 
-            if intersectsAabb(ray, aabb) < hit.intersection.distance {
-                if traverseMesh(&hit, ray, instance.mesh) {
+            if intersects_aabb(ray, aabb) < hit.intersection.distance {
+                var r: Ray;
+                r.orig = instance_position_world_to_local(instance, ray.orig);
+                r.dir = instance_direction_world_to_local(instance, ray.dir);
+                r.inv_dir = 1.0 / r.dir;
+
+                if traverse_mesh(&hit, r, instance.mesh, early_distance) {
                     hit.instance_index = instance_index;
+                    if hit.intersection.distance < early_distance {
+                        return hit;
+                    }
                 }
             }
 
@@ -194,7 +189,7 @@ fn traverseInstances(ray: Ray, max_distance: f32) -> Hit {
             index = select(
                 node.exit_index,
                 node.entry_index,
-                intersectsAabb(ray, aabb) < hit.intersection.distance
+                intersects_aabb(ray, aabb) < hit.intersection.distance
             );
         }
     }
@@ -202,7 +197,7 @@ fn traverseInstances(ray: Ray, max_distance: f32) -> Hit {
     return hit;
 }
 
-fn traverseMesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex) -> bool {
+fn traverse_mesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex, early_distance: f32) -> bool {
     var intersected = false;
     var index = 0u;
     for (; index < mesh.node.y;) {
@@ -216,12 +211,16 @@ fn traverseMesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex) -> bool {
             aabb.min = min(vertices[0].position, min(vertices[1].position, vertices[2].position));
             aabb.max = max(vertices[0].position, max(vertices[1].position, vertices[2].position));
 
-            if intersectsAabb(ray, aabb) < (*hit).intersection.distance {
-                let intersection = intersectsTriangle(ray, vertices);
+            if intersects_aabb(ray, aabb) < (*hit).intersection.distance {
+                let intersection = intersects_triangle(ray, vertices);
                 if intersection.distance < (*hit).intersection.distance {
                     (*hit).intersection = intersection;
                     (*hit).primitive_index = primitive_index;
                     intersected = true;
+
+                    if intersection.distance < early_distance {
+                        return intersected;
+                    }
                 }
             }
 
@@ -232,7 +231,7 @@ fn traverseMesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex) -> bool {
             index = select(
                 node.exit_index,
                 node.entry_index,
-                intersectsAabb(ray, aabb) < (*hit).intersection.distance
+                intersects_aabb(ray, aabb) < (*hit).intersection.distance
             );
         }
     }
@@ -240,7 +239,19 @@ fn traverseMesh(hit: ptr<function, Hit>, ray: Ray, mesh: MeshIndex) -> bool {
     return intersected;
 }
 
-fn intersectsAabb(ray: Ray, aabb: Aabb) -> f32 {
+fn instance_position_world_to_local(instance: Instance, p: vec3<f32>) -> vec3<f32> {
+    let inverse_model = transpose(instance.inverse_transpose_model);
+    let position = inverse_model * vec4<f32>(p, 1.0);
+    return position.xyz / position.w;
+}
+
+fn instance_direction_world_to_local(instance: Instance, p: vec3<f32>) -> vec3<f32> {
+    let inverse_model = transpose(instance.inverse_transpose_model);
+    let direction = inverse_model * vec4<f32>(p, 0.0);
+    return direction.xyz;
+}
+
+fn intersects_aabb(ray: Ray, aabb: Aabb) -> f32 {
     let t1 = (aabb.min - ray.orig) * ray.inv_dir;
     let t2 = (aabb.max - ray.orig) * ray.inv_dir;
 
@@ -260,7 +271,7 @@ fn intersectsAabb(ray: Ray, aabb: Aabb) -> f32 {
     return t;
 }
 
-fn intersectsTriangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Intersection {
+fn intersects_triangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Intersection {
     var hit: Intersection;
 
     let e1 = triangle[1].position - triangle[0].position;
