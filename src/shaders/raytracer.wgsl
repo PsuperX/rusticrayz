@@ -142,7 +142,7 @@ fn pixel_sample_square() -> vec3<f32> {
 fn ray_color(ray: Ray) -> vec3<f32> {
     var new_render_state = traverse_instances(ray, 0.0, F32_MAX);
     if new_render_state.instance_index != U32_MAX {
-        return vec3<f32>(1.0, 0.0, 1.0);
+        return vec3<f32>(new_render_state.intersection.uv, 0.0);
     }
 
     // Miss
@@ -273,6 +273,7 @@ fn intersects_aabb(ray: Ray, aabb: Aabb) -> f32 {
 
 fn intersects_triangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Intersection {
     var hit: Intersection;
+    hit.distance = F32_MAX;
 
     let e1 = triangle[1].position - triangle[0].position;
     let e2 = triangle[2].position - triangle[0].position;
