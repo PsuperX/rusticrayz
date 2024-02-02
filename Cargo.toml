@@ -12,7 +12,8 @@ bvh = "0.7"
 bevy = { version = "0.12", features = ["dynamic_linking"] }
 bevy_mod_debugdump = "0.9"
 bevy-inspector-egui = "0.22"
-bevy_flycam = "0.12.0"
+bevy_flycam = "0.12"
+indexmap = "2.2"
 
 
 # Enable a small amount of optimization in debug mode

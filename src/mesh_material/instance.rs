@@ -1,4 +1,7 @@
-use super::{mesh::prepare_mesh_assets, GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer};
+use super::{
+    mesh::prepare_mesh_assets, GpuMeshIndex, GpuMeshes, GpuNode, GpuNodeBuffer,
+    GpuStandardMaterials,
+};
 use bevy::{
     math::Vec3A,
     prelude::*,
@@ -169,6 +172,7 @@ fn prepare_instances(
     mut extracted_instances: ResMut<ExtractedInstances>,
     mut collection: Local<Instances>,
     meshes: Res<GpuMeshes>,
+    materials: Res<GpuStandardMaterials>,
 ) {
     let instance_changed =
         !extracted_instances.extracted.is_empty() || !extracted_instances.removed.is_empty();
@@ -179,18 +183,25 @@ fn prepare_instances(
 
     let mut prepare_next_frame = vec![];
 
-    for (entity, aabb, transform, mesh, _material, visibility) in
-        extracted_instances.extracted.drain(..).filter_map(
-            |(entity, aabb, transform, mesh, material, visibility)| match meshes.get(&mesh) {
-                Some(mesh) => Some((entity, aabb, transform, mesh, material, visibility)),
+    for (entity, aabb, transform, &mesh, &material, visibility) in extracted_instances
+        .extracted
+        .drain(..)
+        .filter_map(|(entity, aabb, transform, mesh, material, visibility)| {
+            match (meshes.get(&mesh), materials.get(&material)) {
+                (Some(mesh), Some(material)) => {
+                    Some((entity, aabb, transform, mesh, material, visibility))
+                }
                 _ => {
                     // TODO: not sure this can happen
-                    error!("the mesh {:?} was not ready! how did this happen??", mesh);
+                    error!(
+                        "the mesh {:?} or material {:?} was not ready! how did this happen??",
+                        mesh, material
+                    );
                     prepare_next_frame.push((entity, aabb, transform, mesh, material, visibility));
                     None
                 }
-            },
-        )
+            }
+        })
     {
         let transform = transform.compute_matrix();
         let center = transform.transform_point3a(aabb.center);
@@ -224,8 +235,8 @@ fn prepare_instances(
                     max,
                     transform,
                     inverse_transpose_model: transform.inverse().transpose(),
-                    mesh: *mesh,
-                    material: 0, // TODO:
+                    mesh,
+                    material,
                 },
                 visibility,
             ),

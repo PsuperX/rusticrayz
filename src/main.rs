@@ -32,6 +32,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     // circular base
     commands.spawn(PbrBundle {
@@ -41,9 +42,20 @@ fn setup(
         ..default()
     });
     // cube
+    let cube_material = materials.add(StandardMaterial {
+        perceptual_roughness: 0.4,
+        base_color_texture: Some(asset_server.load("textures/cube_color.png")),
+        normal_map_texture: Some(asset_server.load("textures/cube_normal.png")),
+        // depth_map: Some(asset_server.load("textures/cube_depth.png")),
+        ..default()
+    });
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb_u8(124, 144, 255).into()),
+        mesh: meshes.add(
+            Mesh::from(shape::Cube { size: 1.0 })
+                .with_generated_tangents()
+                .unwrap(),
+        ),
+        material: cube_material,
         transform: Transform::from_xyz(0.0, 0.5, 0.0),
         ..default()
     });
