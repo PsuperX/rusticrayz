@@ -31,6 +31,14 @@ struct Hit {
     primitive_index: u32,
 }
 
+struct HitInfo {
+    position: vec4<f32>,
+    normal: vec3<f32>,
+    uv: vec2<f32>,
+    instance_index: u32,
+    material_index: u32,
+}
+
 struct Vertex {
     position: vec3<f32>,
     u: f32,
@@ -150,21 +158,50 @@ fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
 fn ray_color(ray: Ray) -> vec3<f32> {
     var new_render_state = traverse_instances(ray, 0.0, F32_MAX);
     if new_render_state.instance_index != U32_MAX {
-        let instance_idx = new_render_state.instance_index;
-        let material_idx = instance_buffer[instance_idx].material;
+        let info = hit_info(ray, new_render_state);
 
-        var base_color = material_buffer[material_idx].base_color;
-        let texture_idx = material_buffer[material_idx].base_color_texture;
+        var base_color = material_buffer[info.material_index].base_color;
+        let texture_idx = material_buffer[info.material_index].base_color_texture;
         if texture_idx != U32_MAX {
-            base_color *= textureSampleLevel(textures[texture_idx], samplers[texture_idx], new_render_state.intersection.uv, 0.0);
+            base_color *= textureSampleLevel(textures[texture_idx], samplers[texture_idx], info.uv, 0.0);
         }
-        return base_color.xyz;
+        // return base_color.xyz;
+        return vec3<f32>(info.normal);
     }
 
     // Miss
     let unit_dir = normalize(ray.dir);
     let a = 0.5 * (unit_dir.y + 1.0);
     return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
+}
+
+fn hit_info(ray: Ray, hit: Hit) -> HitInfo {
+    var info: HitInfo;
+
+    info.instance_index = hit.instance_index;
+    info.material_index = U32_MAX;
+
+    if hit.instance_index != U32_MAX {
+        let instance = instance_buffer[hit.instance_index];
+        let primitive = primitive_buffer[hit.primitive_index].vertices;
+
+        let vertex0 = vertex_buffer[instance.mesh.vertex + primitive[0].index];
+        let vertex1 = vertex_buffer[instance.mesh.vertex + primitive[1].index];
+        let vertex2 = vertex_buffer[instance.mesh.vertex + primitive[2].index];
+
+        let uv0 = vec2<f32>(vertex0.u, vertex0.v);
+        let uv1 = vec2<f32>(vertex1.u, vertex1.v);
+        let uv2 = vec2<f32>(vertex2.u, vertex2.v);
+
+        let uv = hit.intersection.uv;
+        info.uv = uv.x * uv1 + uv.y * uv2 + (1.0 - uv.x - uv.y) * uv0;
+        let normal = uv.x * vertex1.normal + uv.y * vertex2.normal + (1.0 - uv.x - uv.y) * vertex0.normal;
+        info.normal = instance_direction_local_to_world(instance, normal);
+
+        info.position = vec4<f32>(ray.orig + ray.dir * hit.intersection.distance, 1.0);
+        info.material_index = instance.material;
+    }
+    return info;
 }
 
 fn traverse_instances(ray: Ray, early_distance: f32, max_distance: f32) -> Hit {
@@ -267,6 +304,11 @@ fn instance_direction_world_to_local(instance: Instance, p: vec3<f32>) -> vec3<f
     return direction.xyz;
 }
 
+fn instance_direction_local_to_world(instance: Instance, p: vec3<f32>) -> vec3<f32> {
+    let direction = instance.model * vec4<f32>(p, 0.0);
+    return direction.xyz;
+}
+
 fn intersects_aabb(ray: Ray, aabb: Aabb) -> f32 {
     let t1 = (aabb.min - ray.orig) * ray.inv_dir;
     let t2 = (aabb.max - ray.orig) * ray.inv_dir;
@@ -296,9 +338,15 @@ fn intersects_triangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Interse
     let h = cross(ray.dir, e2);
     let a = dot(e1, h);
 
+#ifdef CULLING
+    if a < 0.00001 {
+        return hit; // The ray is nearly parallel to the triangle
+    }
+#else
     if abs(a) < 0.00001 {
         return hit; // The ray is nearly parallel to the triangle
     }
+#endif
 
     let f = 1.0 / a;
     let s = ray.orig - triangle[0].position;

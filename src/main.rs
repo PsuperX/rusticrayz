@@ -44,6 +44,7 @@ fn setup(
     // cube
     let cube_material = materials.add(StandardMaterial {
         perceptual_roughness: 0.4,
+        // base_color_texture: Some(asset_server.load("textures/uv_grid.png")),
         base_color_texture: Some(asset_server.load("textures/cube_color.png")),
         normal_map_texture: Some(asset_server.load("textures/cube_normal.png")),
         // depth_map: Some(asset_server.load("textures/cube_depth.png")),

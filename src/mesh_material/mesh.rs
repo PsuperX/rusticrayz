@@ -203,14 +203,10 @@ impl TryFrom<Mesh> for GpuMesh {
                         .cloned()
                         .next_tuple()
                         .ok_or(PrepareMeshError::IncompatiblePrimitiveTopology)?;
-                    let mut vertices = [v0, v1, v2]
-                        .into_iter()
-                        .map(|id| vertices[id].position)
-                        .zip(indices.iter())
-                        .map(|(pos, &i)| GpuPrimitiveVertex {
-                            position: pos,
-                            index: i as u32,
-                        });
+                    let mut vertices = [v0, v1, v2].into_iter().map(|i| GpuPrimitiveVertex {
+                        position: vertices[i].position,
+                        index: i as u32,
+                    });
                     let vertices = std::array::from_fn(|_| vertices.next().unwrap());
                     primitives.push(GpuPrimitiveCompact { vertices });
                 }

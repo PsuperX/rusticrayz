@@ -155,7 +155,7 @@ fn add_textures(textures: &mut IndexSet<Handle<Image>>, material: &StandardMater
     }
 }
 
-#[derive(ShaderType)]
+#[derive(Debug, ShaderType)]
 pub struct GpuStandardMaterial {
     pub base_color: Vec4,
     pub base_color_texture: u32,
