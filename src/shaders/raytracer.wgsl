@@ -32,7 +32,7 @@ struct Hit {
 }
 
 struct HitInfo {
-    position: vec4<f32>,
+    position: vec3<f32>,
     normal: vec3<f32>,
     uv: vec2<f32>,
     instance_index: u32,
@@ -127,16 +127,102 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
     seed = u32(screen_pos.x) + randi();
     randi();
 
-    var pixel_color: vec3<f32>;
+    var pixel_color: vec4<f32>;
     // TODO: this
     let samples_per_pixel = 1;
     for (var i = 0; i < samples_per_pixel; i++) {
-        let ray = get_ray(screen_pos, screen_size);
-        pixel_color += ray_color(ray);
+        pixel_color += per_pixel(screen_pos, screen_size);
     }
     pixel_color /= f32(samples_per_pixel);
 
-    textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
+    textureStore(color_buffer, screen_pos, pixel_color);
+}
+
+fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
+    var ray = get_ray(screen_pos, screen_size);
+
+    var light = vec4<f32>(0.0);
+    var contribution = vec4<f32>(1.0);
+
+    // TODO: this
+    let MAX_BOUNCES = 5;
+    for (var i = 0; i < MAX_BOUNCES; i++) {
+        let hit = trace_ray(ray);
+        if hit.instance_index == U32_MAX {
+            // Miss
+            let unit_dir = normalize(ray.dir);
+            let a = 0.5 * (unit_dir.y + 1.0);
+            let sky_color = (1.0 - a) * vec4<f32>(1.0) + a * vec4<f32>(0.5, 0.7, 1.0, 1.0);
+
+            // light += sky_color * contribution;
+            break;
+        }
+
+        let material = material_buffer[hit.material_index];
+
+        // Albedo
+        var albedo = material.base_color;
+        let albedo_idx = material.base_color_texture;
+        if albedo_idx != U32_MAX {
+            albedo *= textureSampleLevel(textures[albedo_idx], samplers[albedo_idx], hit.uv, 0.0);
+        }
+        contribution *= albedo;
+
+        // Emissive
+        var emissive = material.emissive;
+        let emissive_idx = material.emissive_texture;
+        if emissive_idx != U32_MAX {
+            emissive *= textureSampleLevel(textures[emissive_idx], samplers[emissive_idx], hit.uv, 0.0);
+        }
+        light += emissive * contribution;
+
+        ray.orig = hit.position + hit.normal * 0.0001;
+        ray.dir = normalize(hit.normal + rand_unit());
+        ray.inv_dir = 1.0 / ray.dir;
+    }
+
+    return light;
+}
+
+fn trace_ray(ray: Ray) -> HitInfo {
+    let new_render_state = traverse_instances(ray, 0.0, F32_MAX);
+    if new_render_state.instance_index != U32_MAX {
+        return closest_hit(ray, new_render_state);
+    }
+    return miss(ray);
+}
+
+fn closest_hit(ray: Ray, hit: Hit) -> HitInfo {
+    var info: HitInfo;
+    info.instance_index = hit.instance_index;
+
+    let instance = instance_buffer[hit.instance_index];
+    let primitive = primitive_buffer[hit.primitive_index].vertices;
+
+    let vertex0 = vertex_buffer[instance.mesh.vertex + primitive[0].index];
+    let vertex1 = vertex_buffer[instance.mesh.vertex + primitive[1].index];
+    let vertex2 = vertex_buffer[instance.mesh.vertex + primitive[2].index];
+
+    let uv0 = vec2<f32>(vertex0.u, vertex0.v);
+    let uv1 = vec2<f32>(vertex1.u, vertex1.v);
+    let uv2 = vec2<f32>(vertex2.u, vertex2.v);
+
+    let uv = hit.intersection.uv;
+    info.uv = uv.x * uv1 + uv.y * uv2 + (1.0 - uv.x - uv.y) * uv0;
+    let normal = uv.x * vertex1.normal + uv.y * vertex2.normal + (1.0 - uv.x - uv.y) * vertex0.normal;
+    info.normal = instance_direction_local_to_world(instance, normal);
+
+    info.position = ray.orig + ray.dir * hit.intersection.distance;
+    info.material_index = instance.material;
+
+    return info;
+}
+
+fn miss(ray: Ray) -> HitInfo {
+    var info: HitInfo;
+    info.instance_index = U32_MAX;
+    info.material_index = U32_MAX;
+    return info;
 }
 
 fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
@@ -153,55 +239,6 @@ fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
     ray.dir = vec3<f32>(direction.xyz);
     ray.inv_dir = 1.0 / vec3<f32>(direction.xyz);
     return ray;
-}
-
-fn ray_color(ray: Ray) -> vec3<f32> {
-    var new_render_state = traverse_instances(ray, 0.0, F32_MAX);
-    if new_render_state.instance_index != U32_MAX {
-        let info = hit_info(ray, new_render_state);
-
-        var base_color = material_buffer[info.material_index].base_color;
-        let texture_idx = material_buffer[info.material_index].base_color_texture;
-        if texture_idx != U32_MAX {
-            base_color *= textureSampleLevel(textures[texture_idx], samplers[texture_idx], info.uv, 0.0);
-        }
-        // return base_color.xyz;
-        return vec3<f32>(info.normal);
-    }
-
-    // Miss
-    let unit_dir = normalize(ray.dir);
-    let a = 0.5 * (unit_dir.y + 1.0);
-    return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
-}
-
-fn hit_info(ray: Ray, hit: Hit) -> HitInfo {
-    var info: HitInfo;
-
-    info.instance_index = hit.instance_index;
-    info.material_index = U32_MAX;
-
-    if hit.instance_index != U32_MAX {
-        let instance = instance_buffer[hit.instance_index];
-        let primitive = primitive_buffer[hit.primitive_index].vertices;
-
-        let vertex0 = vertex_buffer[instance.mesh.vertex + primitive[0].index];
-        let vertex1 = vertex_buffer[instance.mesh.vertex + primitive[1].index];
-        let vertex2 = vertex_buffer[instance.mesh.vertex + primitive[2].index];
-
-        let uv0 = vec2<f32>(vertex0.u, vertex0.v);
-        let uv1 = vec2<f32>(vertex1.u, vertex1.v);
-        let uv2 = vec2<f32>(vertex2.u, vertex2.v);
-
-        let uv = hit.intersection.uv;
-        info.uv = uv.x * uv1 + uv.y * uv2 + (1.0 - uv.x - uv.y) * uv0;
-        let normal = uv.x * vertex1.normal + uv.y * vertex2.normal + (1.0 - uv.x - uv.y) * vertex0.normal;
-        info.normal = instance_direction_local_to_world(instance, normal);
-
-        info.position = vec4<f32>(ray.orig + ray.dir * hit.intersection.distance, 1.0);
-        info.material_index = instance.material;
-    }
-    return info;
 }
 
 fn traverse_instances(ray: Ray, early_distance: f32, max_distance: f32) -> Hit {
@@ -395,6 +432,16 @@ fn rand() -> f32 {
 // Returns a random real in [min,max).
 fn rand_range(min: f32, max: f32) -> f32 {
     return min + (max - min) * rand();
+}
+
+// Return a random vec3 in the range [-1, 1]
+fn rand_vec3() -> vec3<f32> {
+    return vec3<f32>(rand(), rand(), rand()) * 2.0 - vec3<f32>(1.0);
+}
+
+// Returns a random unit vector
+fn rand_unit() -> vec3<f32> {
+    return normalize(tan(rand_vec3()));
 }
 
 // Source: https://www.shadertoy.com/view/WttXWX

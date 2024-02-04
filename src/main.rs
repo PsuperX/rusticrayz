@@ -46,6 +46,7 @@ fn setup(
         perceptual_roughness: 0.4,
         // base_color_texture: Some(asset_server.load("textures/uv_grid.png")),
         base_color_texture: Some(asset_server.load("textures/cube_color.png")),
+        // emissive: Color::RED,
         normal_map_texture: Some(asset_server.load("textures/cube_normal.png")),
         // depth_map: Some(asset_server.load("textures/cube_depth.png")),
         ..default()
@@ -60,16 +61,56 @@ fn setup(
         transform: Transform::from_xyz(0.0, 0.5, 0.0),
         ..default()
     });
-    // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
-            intensity: 1500.0,
-            shadows_enabled: true,
-            ..default()
-        },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
+    // sphere
+    let sphere_material = materials.add(StandardMaterial {
+        perceptual_roughness: 0.4,
+        emissive: Color::YELLOW,
         ..default()
     });
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(
+            Mesh::from(shape::UVSphere {
+                radius: 1.5,
+                sectors: 10,
+                stacks: 10,
+            })
+            .with_generated_tangents()
+            .unwrap(),
+        ),
+        material: sphere_material,
+        transform: Transform::from_xyz(1.9, 1.7, 0.2),
+        ..default()
+    });
+    // sphere 2
+    let sphere_material = materials.add(StandardMaterial {
+        perceptual_roughness: 0.4,
+        emissive: Color::GREEN,
+        ..default()
+    });
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(
+            Mesh::from(shape::UVSphere {
+                radius: 0.3,
+                sectors: 10,
+                stacks: 10,
+            })
+            .with_generated_tangents()
+            .unwrap(),
+        ),
+        material: sphere_material,
+        transform: Transform::from_xyz(-1.2, 0.4, -0.5),
+        ..default()
+    });
+    // light
+    // commands.spawn(PointLightBundle {
+    //     point_light: PointLight {
+    //         intensity: 1500.0,
+    //         shadows_enabled: true,
+    //         ..default()
+    //     },
+    //     transform: Transform::from_xyz(4.0, 8.0, 4.0),
+    //     ..default()
+    // });
     // camera
     commands.spawn((
         Camera3dBundle {
