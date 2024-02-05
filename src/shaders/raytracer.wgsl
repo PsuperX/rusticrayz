@@ -145,7 +145,7 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
 
     // TODO: this
     let MAX_BOUNCES = 5;
-    for (var i = 0; i < MAX_BOUNCES; i++) {
+    for (var bounces = 0; bounces < MAX_BOUNCES; bounces++) {
         let hit = trace_ray(ray);
         if hit.instance_index == U32_MAX {
             // Miss
@@ -178,6 +178,15 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
         ray.orig = hit.position + hit.normal * 0.0001;
         ray.dir = normalize(hit.normal + rand_unit());
         ray.inv_dir = 1.0 / ray.dir;
+
+        // Russian Roulette
+        if bounces > 3 {
+            let p = max(contribution.x, max(contribution.y, contribution.z));
+            if rand() > p {
+                break;
+            }
+            contribution *= 1.0 / p;
+        }
     }
 
     return light;
