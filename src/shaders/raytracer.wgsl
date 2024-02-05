@@ -65,7 +65,6 @@ struct Instance {
     min: vec3<f32>,
     material: u32,
     max: vec3<f32>,
-    node_index: u32,
     model: mat4x4<f32>,
     inverse_transpose_model: mat4x4<f32>,
     mesh: MeshIndex,
@@ -402,8 +401,10 @@ fn intersects_triangle(ray: Ray, triangle: array<PrimitiveVertex, 3>) -> Interse
 
     let t = f * dot(e2, q);
 
-    hit.distance = t;
-    hit.uv = vec2<f32>(u, v);
+    if t > 0.0001 {
+        hit.distance = t;
+        hit.uv = vec2<f32>(u, v);
+    }
     return hit;
 }
 
