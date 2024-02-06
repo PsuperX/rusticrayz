@@ -1,4 +1,5 @@
 #import bevy_render::view::View
+#import bevy_pbr::utils::PI
 
 struct Ray {
     dir: vec3<f32>,
@@ -112,6 +113,8 @@ const F32_MAX: f32 = 3.4028235e38;
 const U32_MAX: u32 = 0xFFFFFFFFu;
 const BVH_LEAF_FLAG: u32 = 0x80000000u;
 
+#define IMPORTANCE_SAMPLING
+
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
     let screen_size = vec2<i32>(textureDimensions(color_buffer));
@@ -165,7 +168,6 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
         if albedo_idx != U32_MAX {
             albedo *= textureSampleLevel(textures[albedo_idx], samplers[albedo_idx], hit.uv, 0.0);
         }
-        contribution *= albedo;
 
         // Emissive
         var emissive = material.emissive;
@@ -176,8 +178,21 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
         light += emissive * contribution;
 
         ray.orig = hit.position + hit.normal * 0.0001;
+#ifdef IMPORTANCE_SAMPLING
+        ray.dir = sample_cosine_weighted_direction(hit.normal);
+#else
         ray.dir = normalize(hit.normal + rand_unit());
+#endif
         ray.inv_dir = 1.0 / ray.dir;
+
+#ifdef IMPORTANCE_SAMPLING
+        // Importance sampling
+        let scattering_pdf = scattering_pdf(ray, hit);
+        let pdf = dot(normalize(hit.normal), ray.dir) / PI;
+        contribution *= scattering_pdf * albedo / pdf;
+#else
+        contribution *= albedo;
+#endif
 
         // Russian Roulette
         if bounces > 3 {
@@ -188,7 +203,6 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
             contribution *= 1.0 / p;
         }
     }
-
     return light;
 }
 
@@ -231,6 +245,49 @@ fn miss(ray: Ray) -> HitInfo {
     info.instance_index = U32_MAX;
     info.material_index = U32_MAX;
     return info;
+}
+
+// ChatGPT made this
+// not sure if its correct
+fn sample_cosine_weighted_direction(surface_normal: vec3<f32>) -> vec3<f32> {
+    // Generate random numbers for theta and phi
+    let theta = acos(sqrt(rand()));
+    let phi = rand_range(0.0, 2.0 * PI);
+
+    // Convert spherical coordinates to Cartesian coordinates
+    let x = sin(theta) * cos(phi);
+    let y = sin(theta) * sin(phi);
+    let z = cos(theta);
+
+    // Convert direction to local coordinate system
+    // by aligning the surface normal with the z-axis
+    let z_axis = normalize(surface_normal);
+    var x_axis = cross(z_axis, vec3<f32>(0.0, 0.0, 1.0));
+    if length(x_axis) == 0.0 {
+        x_axis = cross(z_axis, vec3<f32>(1.0, 0.0, 0.0));
+    }
+    x_axis = normalize(x_axis);
+    let y_axis = cross(z_axis, x_axis);
+
+    let direction_local = vec3<f32>(x, y, z);
+    let direction = vec3<f32>(
+        dot(vec3<f32>(x_axis.x, y_axis.x, z_axis.x), direction_local),
+        dot(vec3<f32>(x_axis.y, y_axis.y, z_axis.y), direction_local),
+        dot(vec3<f32>(x_axis.z, y_axis.z, z_axis.z), direction_local)
+    );
+
+    return direction;
+}
+
+// For lambertian/cosine weighted materials
+// Source: https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html
+fn scattering_pdf(next_ray: Ray, hit: HitInfo) -> f32 {
+    let cos_theta = dot(hit.normal, normalize(next_ray.dir));
+    if cos_theta < 0.0 {
+        return 0.0;
+    } else {
+        return cos_theta / PI;
+    }
 }
 
 fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
@@ -449,6 +506,7 @@ fn rand_vec3() -> vec3<f32> {
     return vec3<f32>(rand(), rand(), rand()) * 2.0 - vec3<f32>(1.0);
 }
 
+// TODO: this is WRONG!!!
 // Returns a random unit vector
 fn rand_unit() -> vec3<f32> {
     return normalize(tan(rand_vec3()));
