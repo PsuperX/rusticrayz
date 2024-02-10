@@ -111,9 +111,11 @@ struct Material {
 
 const F32_MAX: f32 = 3.4028235e38;
 const U32_MAX: u32 = 0xFFFFFFFFu;
+const INV_PI: f32 = 0.318309886184;
 const BVH_LEAF_FLAG: u32 = 0x80000000u;
 
-#define IMPORTANCE_SAMPLING
+// TODO: this should be by instance
+#define CULLING
 
 @compute @workgroup_size(8,8,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
@@ -143,8 +145,8 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
 fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
     var ray = get_ray(screen_pos, screen_size);
 
-    var light = vec4<f32>(0.0);
-    var contribution = vec4<f32>(1.0);
+    var light = vec3<f32>(0.0);
+    var contribution = vec3<f32>(1.0);
 
     // TODO: this
     let MAX_BOUNCES = 5;
@@ -154,7 +156,7 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
             // Miss
             let unit_dir = normalize(ray.dir);
             let a = 0.5 * (unit_dir.y + 1.0);
-            let sky_color = (1.0 - a) * vec4<f32>(1.0) + a * vec4<f32>(0.5, 0.7, 1.0, 1.0);
+            let sky_color = (1.0 - a) * vec3<f32>(1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 
             // light += sky_color * contribution;
             break;
@@ -163,36 +165,32 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
         let material = material_buffer[hit.material_index];
 
         // Albedo
-        var albedo = material.base_color;
+        var albedo = material.base_color.xyz;
         let albedo_idx = material.base_color_texture;
         if albedo_idx != U32_MAX {
-            albedo *= textureSampleLevel(textures[albedo_idx], samplers[albedo_idx], hit.uv, 0.0);
+            albedo *= textureSampleLevel(textures[albedo_idx], samplers[albedo_idx], hit.uv, 0.0).xyz;
         }
 
         // Emissive
-        var emissive = material.emissive;
+        var emissive = material.emissive.xyz;
         let emissive_idx = material.emissive_texture;
         if emissive_idx != U32_MAX {
-            emissive *= textureSampleLevel(textures[emissive_idx], samplers[emissive_idx], hit.uv, 0.0);
+            emissive *= textureSampleLevel(textures[emissive_idx], samplers[emissive_idx], hit.uv, 0.0).xyz;
         }
         light += emissive * contribution;
 
-        ray.orig = hit.position + hit.normal * 0.0001;
-#ifdef IMPORTANCE_SAMPLING
-        ray.dir = sample_cosine_weighted_direction(hit.normal);
-#else
-        ray.dir = normalize(hit.normal + rand_unit());
-#endif
-        ray.inv_dir = 1.0 / ray.dir;
+        let wo = -ray.dir;
+        var t: vec3<f32>;
+        var b: vec3<f32>;
+        branchless_onb(hit.normal, &t, &b);
+        let wo_onb = world_to_local_onb(wo, t, b, hit.normal);
+        let sample = sample_lambertian(albedo, wo_onb);
+        let wi = local_to_world_onb(sample.wi, t, b, hit.normal);
+        contribution *= sample.color * abs(sample.wi.z) / sample.pdf;
 
-#ifdef IMPORTANCE_SAMPLING
-        // Importance sampling
-        let scattering_pdf = scattering_pdf(ray, hit);
-        let pdf = dot(normalize(hit.normal), ray.dir) / PI;
-        contribution *= scattering_pdf * albedo / pdf;
-#else
-        contribution *= albedo;
-#endif
+        ray.orig = hit.position + hit.normal * 0.0001;
+        ray.dir = wi;
+        ray.inv_dir = 1.0 / ray.dir;
 
         // Russian Roulette
         if bounces > 3 {
@@ -203,7 +201,7 @@ fn per_pixel(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> vec4<f32> {
             contribution *= 1.0 / p;
         }
     }
-    return light;
+    return vec4<f32>(light, 1.0);
 }
 
 fn trace_ray(ray: Ray) -> HitInfo {
@@ -247,47 +245,68 @@ fn miss(ray: Ray) -> HitInfo {
     return info;
 }
 
-// ChatGPT made this
-// not sure if its correct
-fn sample_cosine_weighted_direction(surface_normal: vec3<f32>) -> vec3<f32> {
-    // Generate random numbers for theta and phi
-    let theta = acos(sqrt(rand()));
-    let phi = rand_range(0.0, 2.0 * PI);
-
-    // Convert spherical coordinates to Cartesian coordinates
-    let x = sin(theta) * cos(phi);
-    let y = sin(theta) * sin(phi);
-    let z = cos(theta);
-
-    // Convert direction to local coordinate system
-    // by aligning the surface normal with the z-axis
-    let z_axis = normalize(surface_normal);
-    var x_axis = cross(z_axis, vec3<f32>(0.0, 0.0, 1.0));
-    if length(x_axis) == 0.0 {
-        x_axis = cross(z_axis, vec3<f32>(1.0, 0.0, 0.0));
-    }
-    x_axis = normalize(x_axis);
-    let y_axis = cross(z_axis, x_axis);
-
-    let direction_local = vec3<f32>(x, y, z);
-    let direction = vec3<f32>(
-        dot(vec3<f32>(x_axis.x, y_axis.x, z_axis.x), direction_local),
-        dot(vec3<f32>(x_axis.y, y_axis.y, z_axis.y), direction_local),
-        dot(vec3<f32>(x_axis.z, y_axis.z, z_axis.z), direction_local)
-    );
-
-    return direction;
+struct BSDFSample {
+    color: vec3<f32>,
+    wi: vec3<f32>,
+    pdf: f32,
 }
 
-// For lambertian/cosine weighted materials
-// Source: https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html
-fn scattering_pdf(next_ray: Ray, hit: HitInfo) -> f32 {
-    let cos_theta = dot(hit.normal, normalize(next_ray.dir));
-    if cos_theta < 0.0 {
-        return 0.0;
-    } else {
-        return cos_theta / PI;
+fn sample_lambertian(albedo: vec3<f32>, wo: vec3<f32>) -> BSDFSample {
+    // Sample cosine-weighted hemisphere to compute _wi_ and _pdf_
+    var wi = sample_cosine_hemisphere();
+    if wo.z < 0.0 {
+        wi.z *= -1.0;
     }
+    let pdf = cosine_hemisphere_pdf(abs(wi.z));
+
+    return BSDFSample(albedo * INV_PI, wi, pdf);
+}
+
+fn sample_cosine_hemisphere() -> vec3<f32> {
+    let d = sample_uniform_disk_concentric();
+    let z = sqrt(max(1.0 - dot(d, d), 0.0));
+    return vec3<f32>(d.x, d.y, z);
+}
+
+fn cosine_hemisphere_pdf(cosTheta: f32) -> f32 {
+    return cosTheta * INV_PI;
+}
+
+fn sample_uniform_disk_concentric() -> vec2<f32> {
+    // Map u to [-1,1]^2 and handle degeneracy at the origin
+    let uOffset = vec2<f32>(2.0 * rand() - 1.0, 2.0 * rand() - 1.0);
+    if uOffset.x == 0.0 && uOffset.y == 0.0 {
+        return vec2<f32>(0.0, 0.0);
+    }
+
+    // Apply concentric mapping to point
+    var theta: f32;
+    var r: f32;
+    if abs(uOffset.x) > abs(uOffset.y) {
+        r = uOffset.x;
+        theta = 0.25 * PI * (uOffset.y / uOffset.x);
+    } else {
+        r = uOffset.y;
+        theta = 0.5 * PI - 0.25 * PI * (uOffset.x / uOffset.y);
+    }
+    return vec2<f32>(r * cos(theta), r * sin(theta));
+}
+
+// https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+fn branchless_onb(n: vec3<f32>, out_b1: ptr<function, vec3<f32>>, out_b2: ptr<function, vec3<f32>>) {
+    let sign = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (sign + n.z);
+    let b = n.x * n.y * a;
+    (*out_b1) = vec3<f32>(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+    (*out_b2) = vec3<f32>(b, sign + n.y * n.y * a, -n.y);
+}
+
+fn world_to_local_onb(v: vec3<f32>, T: vec3<f32>, B: vec3<f32>, N: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(dot(v, T), dot(v, B), dot(v, N));
+}
+
+fn local_to_world_onb(v: vec3<f32>, T: vec3<f32>, B: vec3<f32>, N: vec3<f32>) -> vec3<f32> {
+    return v.x * T + v.y * B + v.z * N;
 }
 
 fn get_ray(screen_pos: vec2<i32>, screen_size: vec2<i32>) -> Ray {
@@ -504,12 +523,6 @@ fn rand_range(min: f32, max: f32) -> f32 {
 // Return a random vec3 in the range [-1, 1]
 fn rand_vec3() -> vec3<f32> {
     return vec3<f32>(rand(), rand(), rand()) * 2.0 - vec3<f32>(1.0);
-}
-
-// TODO: this is WRONG!!!
-// Returns a random unit vector
-fn rand_unit() -> vec3<f32> {
-    return normalize(tan(rand_vec3()));
 }
 
 // Source: https://www.shadertoy.com/view/WttXWX
